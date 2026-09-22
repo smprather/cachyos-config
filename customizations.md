@@ -845,6 +845,16 @@ entries below.
   a shell script whose lines contain the literal string `tmux kill-server`
   triggers the block even when it only tests the rule. Verifiers therefore
   read test commands from a file instead of a heredoc.
+- Deliberate over-block, reviewed and kept (2026-09-22): `tmux *kill-server*`
+  also blocks `tmux -L <scratch> kill-server`. Kept because scratch servers
+  exit when their last session ends (verified live), so `kill-session` — still
+  allowed — is a complete substitute; nothing on this machine tears down a
+  scratch socket with `kill-server` (repo-wide search + shell history); and a
+  socket-scoped rule set cannot be made safe: `-f` does NOT change the socket
+  (`env -u TMUX tmux -f /dev/null ls` lists the shared server) and `--`/`-c`/
+  `-u` may also precede the subcommand, so a bare-only or `-L default`-only
+  rule set leaves a live hole. Cost if it ever bites: one loud block with an
+  allowed alternative; cost of under-block: the 2026-09-21 incident.
 - Rollback: `hermes config unset approvals.deny`; remove the `permissions`
   block from `~/.claude/settings.json`; restore `"permission": "allow"` in
   `~/.config/opencode/opencode.jsonc`. Backups:
