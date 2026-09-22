@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Capture Region to Clipboard
+Comment=Capture a selected screen region without opening Spectacle
+Exec=/home/mylesp/.local/bin/region-screenshot
+Icon=org.kde.spectacle
+NoDisplay=true
+X-KDE-Shortcuts=F13

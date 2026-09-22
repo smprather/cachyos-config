@@ -1,0 +1,24 @@
+# MUST DENY (expect exit=3)
+tmux kill-server
+tmux kill-server 2>/dev/null
+tmux kill-server; echo done
+tmux -L default kill-server
+tmux -S /tmp/tmux-1000/default kill-server
+tmux -f /dev/null kill-server
+sudo tmux kill-server
+/usr/bin/env tmux kill-server
+pkill tmux
+pkill -f tmux
+pkill -9 -f tmux
+killall tmux
+killall -9 tmux
+killall --signal KILL tmux
+# MUST NOT DENY (expect exit=0 or 2, never 3)
+tmux ls
+tmux new-session -d -s probe -x 100 -y 30
+tmux kill-session -t probe
+tmux kill-session -t candelise
+tmux show-options -s
+tmux display-message -p '#{version}'
+pgrep -a tmux
+killall firefox

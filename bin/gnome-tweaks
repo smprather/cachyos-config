@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# GNOME Tweaks is packaged against CachyOS's Python and GI stack. Keep the
+# shared ~/.local runtime from shadowing those system dependencies.
+unset GI_TYPELIB_PATH
+unset LD_LIBRARY_PATH
+unset PYTHONHOME
+unset PYTHONPATH
+
+PATH=/usr/bin:/bin
+export PATH
+
+exec /usr/bin/gnome-tweaks "$@"

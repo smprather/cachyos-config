@@ -1,0 +1,11 @@
+[Unit]
+Description=Custom idle daemon — manual DPMS + suspend (no hypridle)
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/custom-idle.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

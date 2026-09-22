@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+pictures_dir=${XDG_PICTURES_DIR:-"$HOME/Pictures"}
+capture_dir="$pictures_dir/Screenshots"
+capture_file="$capture_dir/Screenshot_$(date +%Y%m%d_%H%M%S_%N).png"
+
+mkdir -p "$capture_dir"
+spectacle --region --background --nonotify --release-capture --output "$capture_file"
+wl-copy --type image/png <"$capture_file"
+
+edit_action=$(notify-send \
+    --app-name=region-screenshot \
+    --icon=camera-photo \
+    --expire-time=10000 \
+    --action=edit="Edit Grab" \
+    --wait \
+    "Grab captured" \
+    "Saved to Screenshots and copied to clipboard." \
+    2>/dev/null || true)
+
+if [ "$edit_action" = "edit" ]; then
+    spectacle --edit-existing "$capture_file"
+fi
