@@ -12,3 +12,5 @@ part of the preferred setup; record detailed diagnosis and changes in
 | Okular | Primary PDF and general document reader | `okular` | KDE-native; supports annotations, forms, and common document formats. |
 | Pinta | Lightweight image editor | `pinta` | GTK4/libadwaita; quick annotations and edits for captured screenshots. |
 | Resources | Graphical system and process monitor | `resources` | GNOME Circle application; usable from Plasma and other desktops. |
+| btm | Terminal system/process monitor | `cargo:bottom` | Installs the `btm` executable; the `bottom` crate provides a configurable TUI with CPU, memory, disk, network, process, and GPU views. |
+| nvglances | NVIDIA-focused terminal system monitor | `cargo:nvglances` | Rust TUI using NVML; shows CPU, memory, network, GPU utilization, and GPU processes. |

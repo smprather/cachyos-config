@@ -25,6 +25,7 @@ reasoning needed to avoid known integration failures.
 - [Hyprland: lua wrapper and HyDE](hyprland-cachyos-lua-hyde.md) — CachyOS lua config system, HyDE overlay lessons
 - [EL8 GUI apps](el8-gui-apps.md) — Firefox ESR and wezterm: bundled sonames, lib64 shadowing, NSS trust proxy
 - [GNOME configuration](gnome-configuration.md) — keyboard repeat, FancyZones-style drag tiling, an ungrouped current-workspace taskbar, GNOME Tweaks runtime isolation, and Python-tool installation policy
+- [DeepSeek Harness](deepseek-harness.md) — the `dsh` agent harness: npm install, provider routes to Ollama Cloud/OpenRouter, profile modes, and the no-TUI finding
 
 ## Provenance
 

@@ -40,6 +40,16 @@ Then read the topic file for the area you are touching:
 - `hyprland-cachyos-lua-hyde.md` for Hyprland/HyDE/CachyOS Lua wrapper history.
 - `el8-gui-apps.md` and `foreign-binary-compat.md` for EL8 binary compatibility.
 - `gnome-configuration.md` for GNOME-specific settings and extension notes.
+- `deepseek-harness.md` for the DeepSeek Harness (`dsh`) agent harness, its
+  provider routes, profiles, and the missing TUI.
+- `text-rendering-quality-tools.md` for measuring rendered-text quality. Key
+  constraint: the check must work from a **screen grab**, so the terminal's own
+  rendering is inside it — font-file and FreeType-direct tools are diagnosis
+  only, never the acceptance test.
+- `alacritty-terminal.md` for the alacritty ("atty") daily-driver setup: config mapping
+  from wezterm, the palette switcher, the pinned `#000000` background, the live-reload
+  rules, and the IPC-socket trap. **Resume point: palette tuning.** Never `pkill
+  alacritty` — it kills the instance being worked in and live reload makes it pointless.
 
 ## Hard Rules
 
@@ -56,7 +66,46 @@ Then read the topic file for the area you are touching:
   passwordless polkit for `wheel`, autologin, disabled screen lock, and an
   unencrypted login keyring on an unencrypted disk.
 - Do not use `pkill -f <pattern>` casually. The invoking shell can match its own
-  command line. Prefer exact process names or explicit PIDs.
+  command line. Prefer exact process names or explicit PIDs. A bracket pattern
+  such as `pgrep -f '[f]onttest.sh'` is the reliable way to search without
+  matching yourself; I SIGTERM'd my own shell with a plain `pgrep -f` loop
+  before writing this rule the second time.
+- Never invoke bare `wezterm-gui` from a shell. A Dec 2019 loadout wrapper in
+  `~/.local/bin` shadows the real binary and SIGSEGVs in
+  `libnvidia-egl-wayland2`. Use `wezterm start` or `/usr/bin/wezterm-gui`.
+- Editing `~/.config/wezterm/wezterm.lua` and touching the file **does apply
+  live** to already-open windows -- but only when the config loads cleanly.
+  Repeated hard errors leave a window frozen on its old config until a restart.
+  That distinction is the whole trap: a stale window looks exactly like a broken
+  config. Check the log first
+  (`/run/user/1000/wezterm/wezterm-gui-log-<gui-pid>.txt`), then judge by
+  measurement (`wezterm cli list` cols/rows, or px/cols from `xwininfo`), not by
+  eye. `wezterm cli spawn --new-window` and `wezterm cli kill-pane --pane-id N`
+  are the tools for driving windows from a shell; KWin scripting via
+  `qdbus6 org.kde.KWin /Scripting ...loadScript` can resize them.
+- Change wezterm font knobs (size / leading / family) only via
+  `~/.local/bin/wezterm-tune`, which rewrites `~/.config/wezterm/tuning.lua` and
+  touches `wezterm.lua` to reload. Do **not** use
+  `window:set_config_overrides({font_size = N})`: mixed with wezterm's built-in
+  `Increase/DecreaseFontSize` it renders a size that matches neither the request
+  nor the config (asking for 20pt after one built-in increase produced ~22.5pt),
+  and it was not reproducible between runs. The knob key bindings deliberately
+  shadow the built-ins so only one mechanism is ever in play.
+  `~/.cache/wezterm-tune.log` is what proves a keybinding actually reached the
+  tuner.
+- `return config` must stay the last statement in `wezterm.lua`. Both `>>` and
+  `sed -i "${N}r file"` insert *after* the addressed line, so inserting before
+  `return config` needs `sed -i "$((N-1))r file"`. The failure is loud in the
+  GUI log (`<eof> expected near ...`) and silent in the UI (wezterm falls back to
+  builtin defaults), so always read the insertion point back with `grep -n`
+  before touching the config.
+- Any long unattended or screen-grab-based work must inhibit idle first. A
+  DPMS-blanked display returns black captures, which silently invalidates every
+  screen-grab check. PowerDevil is the only idle manager here
+  (`custom-idle.service` and `hypridle` are disabled), so use
+  `systemd-inhibit --what=idle:sleep --mode=block ... sleep N` plus a
+  FreeDesktop `ScreenSaver.Inhibit` cookie. `SetActive(false)` is *not* an
+  inhibition mechanism.
 - Preserve unrelated local changes. This repo commonly has many unstaged
   documentation files.
 
@@ -90,6 +139,19 @@ Then read the topic file for the area you are touching:
 
 - Record meaningful system changes in `customizations.md` with date, command,
   affected files, verification, and rollback.
+- Every install and every uninstall must be recorded as a **replayable command
+  pair** — the exact command(s) to redo it and the exact command(s) to undo it,
+  in order. The goal is rebuilding this machine from scratch by reading the log
+  top to bottom, never from memory. A change that cannot be undone on paper is
+  not finished.
+  - Pacman installs: record the full `sudo pacman -Syu --noconfirm <pkgs>` line
+    plus `sudo pacman -Rns <pkgs>`, and the pre/post snapper numbers.
+  - User-scope installs (flatpak, cargo, npm, pipx, from-source, tarballs) get
+    extra care precisely because there is **no snapper fallback**: name the
+    uninstall explicitly, and for flatpak also cover the remote and any now
+    unused runtimes. Note the disk footprint if it is large.
+  - If a package was removed again later, log the removal as its own entry
+    rather than editing the original one. `customizations.md` is append-only.
 - Prefer exact observed facts over assumptions. Include verification commands
   when a fact may drift with package updates or desktop changes.
 - Before package-level changes, note the existing state and the expected snapper
