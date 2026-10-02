@@ -2986,3 +2986,155 @@ it inert there too.
 
 Validated: a fresh instance starts with no config errors or warnings. Behaviour still needs a
 real click to confirm -- see the earlier note on why it cannot be tested from here.
+
+
+## 2026-10-01 — tmux: the status bar was unreadable, and the fix was colour pinning
+
+Affected: `~/.config/tmux/tmux.conf`. That file is **outside this repo** (`~/.tmux.conf` is a
+symlink to it), so the changes are recorded here and in the new `tmux.md` topic file rather
+than tracked as files.
+
+Backup taken before the first edit (no edit was made without one):
+
+    ~/.config/tmux/tmux.conf.bak-20261001-224614-prebar
+
+### The reported problem, measured rather than judged
+
+The complaint was that the tmux window was hard to read. A screen grab cropped to the status
+band and segmented by background colour gave the cause in one line:
+
+| segment | bg | glyph | contrast |
+| --- | --- | --- | --- |
+| status bar (default) | `#a6e3a1` green | `#45475a` | 6.14:1 ok |
+| **active window** | `#89b4fa` blue | `#bac2de` white | **1.19:1** |
+
+The culprit was `set -g window-status-current-style "fg=white bg=blue"`. Those are ANSI slot
+names, so tmux resolves them against the terminal palette; under catppuccin mocha `white` and
+`blue` are both light, hence light-on-light. The green bar was tmux's own default
+(`status-style bg=green`), never a chosen value.
+
+### What changed
+
+Everything is now literal hex, so the bar and grid render identically on every machine this
+config is carried to, whatever that terminal's palette is. Ratios are WCAG contrast against
+each pair's own background:
+
+    set -g status-style                  "fg=#a6adc8 bg=#1a1d2b"         # 7.52:1
+    set -g status-left-style             "fg=#11111b bg=#89b4fa,bold"
+    set -g status-left                   " #S "
+    set -g status-right-length           12
+    set -g status-right                  "#[fg=#fab387 bold]#{?window_zoomed_flag, ZOOM ,}"
+    set -g window-status-separator       ""
+    set -g window-status-style           "fg=#7f849c bg=#1a1d2b"         # 4.53:1
+    set -g window-status-format          " #I:#W "
+    set -g window-status-current-style   "fg=#11111b bg=#89b4fa,bold"    # 8.91:1
+    set -g window-status-current-format  " #I:#W "
+    set -g window-status-activity-style  "fg=#fab387 bg=#1a1d2b"         # 9.46:1
+    set -g window-status-bell-style      "fg=#f38ba8 bg=#1a1d2b,bold"    # 7.23:1
+    set -g pane-border-lines             single
+    set -g pane-border-style             "fg=#43704d"                   # 3.66:1
+    set -g pane-active-border-style      "fg=#43704d bg=#090909"
+    set -g pane-border-indicators        off
+    set -g window-active-style           "bg=#090909"                   # 1.055:1 raise
+
+Removed: `set -g pane-active-border-style "bg=red fg=red"` (a solid red frame),
+`set -g status-right-length 0`, `set -g status-right ""`, the old `#F`-bearing window
+formats, and the unset `window-status-current-style`.
+
+The bar background requires **three matching edits**: `status-style` plus the
+`bg=` in `window-status-style`, `window-status-activity-style` and `window-status-bell-style`.
+They are separate hard-coded copies; changing only `status-style` leaves dark patches.
+
+### Apply / undo (replayable)
+
+There is no package to install. To redo the change on another machine, write the "What
+changed" block above into `~/.config/tmux/tmux.conf` in place of the four removed lines, then:
+
+    cp -a ~/.config/tmux/tmux.conf ~/.config/tmux/tmux.conf.bak-$(date +%Y%m%d-%H%M%S)-prebar   # first!
+    tmux source-file ~/.config/tmux/tmux.conf
+    tmux show-options -g status-style window-status-style pane-border-style window-active-style
+
+Undo, in order:
+
+    cp ~/.config/tmux/tmux.conf.bak-20261001-224614-prebar ~/.config/tmux/tmux.conf
+    tmux source-file ~/.config/tmux/tmux.conf
+
+Reload with `source-file`, **never** by restarting the server: killing it kills the panes
+being worked in. tmux rejects an invalid config and keeps the running one, so a bad edit
+cannot wedge a live session.
+
+### Verification
+
+Contrast was measured from screen grabs, not from the option values:
+
+    # live bar, after the change: chip 8.91:1, active 8.91:1, inactive 5.07:1-on-crust
+
+Final green-border build, measured on the live screen:
+
+| check | result |
+| --- | --- |
+| 1px scan across the active pane's left edge | `[#000000][#090909][1px #43704d][#090909][content]` |
+| green `#43704d` pixel count | 5950 px — **identical** to the slate count it replaced, i.e. the grid geometry did not move, only the hue |
+| stale `#7d8ab0` remaining | 0 px |
+| fill `#090909` painted | 365,642 px |
+
+The identical pixel count across a colour swap is the useful signal here: it confirms a pure
+recolour with nothing else disturbed.
+
+### Traps found (now documented inline in the config and in `tmux.md`)
+
+**A comma inside `#[...]` nested in `#{?...}` leaks literal text onto the bar.** The
+conditional splits its arguments on commas and does not protect the bracket, so
+`#{?client_prefix,#[fg=#11111b bg=#fab387,bold],...}` printed a stray `bold]`. Fix:
+space-separate the attributes. This was shipped and then seen on screen before being
+diagnosed — the format-string parser treats `#[...]` as opaque only outside a conditional.
+
+**`shot.sh window` captures whatever has focus, and a wrong-window grab is not obviously
+wrong.** Several measurements were taken while the terminal was backgrounded; one of them
+was Firefox, and it was sharp and plausible. Two of the earlier "the change is not visible"
+readings were taken from grabs of the wrong surface. The focus-independent path here is
+`spectacle -m` (current monitor), which should have been the tool from the start.
+`region`, `app` and `full` modes cannot work on this box: `xwininfo -root` reports `0x0`.
+
+**Integer cell arithmetic drifts.** Converting tmux cell coordinates to pixels with
+`width/total_cells` integer division accumulated ~45px of error by cell 140 and sampled the
+wrong column, producing a confident "the border line is not drawn" that was false. Use
+`round(cell * width / total_cells)`.
+
+**A running tmux server can be older than the config file.** Observed: server started
+09:46:43, config last written 09:54:12. Live options did not match the file until a
+`source-file`.
+
+**tmux-continuum injects `status-right` at runtime.** `set -g status-right ""` does not
+yield an empty value; the plugin prepends its `#(...continuum_save.sh)` call. It emits
+nothing, so it is invisible, but it shares the `status-right-length` budget.
+
+### Rejected along the way
+
+Recorded so they are not re-litigated:
+
+- `pane-border-indicators both` (arrows at the active pane's edges) — visually noisy.
+- Active border **filled** (`bg` set as well as `fg`) — a solid bright bar, too loud.
+- Active border coloured identically to the pane fill — indistinguishable, and this is
+  where it was wrongly concluded that the line "cannot be kept". It can: `fg` draws the
+  line, `bg` fills the cell, and setting them equal merely hides the line behind the fill.
+- Active blue + inactive left at tmux's `default` — `default` resolves to the terminal
+  default fg (`#cdd6f4`), so *both* borders rendered light and only hue separated them.
+
+### Known limitation carried forward
+
+The active pane is marked by a raised fill and by its border. **The fill is masked by any
+program that paints its own background** — an `nvim` pane shows none of it, so those panes
+fall back to the border alone. On the current machine the two cues cover for each other; on
+another terminal only one may survive. The fill is also the one non-portable value in the
+config, since `#090909` is only "above the background" where the background is `#000000`.
+Not yet tried if a stronger cue is ever needed: `pane-border-status top` with an inverted
+active title, at the cost of a row of height per pane.
+
+### Rollback
+
+    cp ~/.config/tmux/tmux.conf.bak-20261001-224614-prebar ~/.config/tmux/tmux.conf
+    tmux source-file ~/.config/tmux/tmux.conf
+
+The backup also records the pre-2026-10-01 state of the mouse bindings and the word
+separators, which were not touched here.
