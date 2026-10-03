@@ -143,3 +143,38 @@ kbuildsycoca6 --noincremental
 
 Log out and back in after the rollback so the global-shortcut daemon reloads
 `kglobalshortcutsrc`.
+
+## Agent screen grabs (a different problem from the PrintScreen flow above)
+
+Everything above is the *human* capture path: PrintScreen, a region, the clipboard. An
+agent grabbing the screen has different constraints, and two traps that both produce
+confident, wrong results.
+
+**This machine cannot produce a full-desktop grab.** `xwininfo -root` reports `0x0`
+geometry, so the crop-based paths (`full`, `region`, `app`) cannot work. They die loudly
+rather than returning junk, which is the good outcome.
+
+**The working path is `spectacle -m`** — current monitor, no focus requirement:
+
+```sh
+spectacle -m -b -n -o /tmp/mon.png
+```
+
+3440x1440 here. Validate the artifact anyway: `spectacle -f` exits 0 and writes **no file
+at all**, so exit status is not success.
+
+**Trap 1: a grab of the wrong window is not obviously wrong.** `shot.sh window` captures
+whatever has FOCUS. It has returned a sharp, well-exposed image of Firefox while the
+terminal was backgrounded, and the measurement taken from it was of a browser rather than
+tmux — with nothing in the image to flag it. Confirm from the image itself that it
+contains the window you meant before concluding anything. `spectacle -m` sidesteps the
+whole problem, which is why it is the default here.
+
+**Trap 2: a blanked display returns black.** DPMS-blanked captures are silently invalid,
+so inhibit idle first — `systemd-inhibit --what=idle:sleep --mode=block` plus a
+FreeDesktop `ScreenSaver.Inhibit` cookie. `SetActive(false)` is NOT an inhibition
+mechanism. See `AGENTS.md` for the standing rule.
+
+A third, subtler one: `magick <png> txt:-` output carries an **alpha component**
+(`(r,g,b,a)`), so a parser written for `(r,g,b)` matches nothing and reports "no pixels"
+— which reads as "the colour is absent" rather than "the regex is wrong".
