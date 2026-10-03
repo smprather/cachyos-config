@@ -1,164 +1,227 @@
 # tmux
 
-Operational state for the tmux setup. Read this before touching
-`~/.config/tmux/tmux.conf`. The reasoning behind the current values is in
-`customizations.md` under the 2026-10-01 entries.
+Operational state for the tmux setup. Read this before touching anything under
+`~/.config/tmux/`. The dated reasoning is in `customizations.md`.
 
-Version: tmux 3.7b. Prefix is `C-\`.
+Version here: tmux 3.7b. Prefix is `C-\`.
 
-## Files
+## Files — it is a LAYERED config, not one file
 
-- `~/.config/tmux/tmux.conf` — the config. `~/.tmux.conf` is a **symlink** to it, so
-  editing `~/.tmux.conf` and editing the real file are the same thing.
-- `~/.config/tmux/tmux.conf.bak-<timestamp>-<tag>` — dated backups. The one that
-  precedes the 2026-10-01 status-bar work is `…-20261001-224614-prebar`.
-- `~/.config/tmux/` also holds helper scripts: `shell-state-export.sh`,
-  `tmux-3col-layout.sh`, `tmux-popin.sh`, `tmux-popout.sh`, `tmux-word-separators`.
-- Plugins live in `~/.tmux/plugins/`: `tpm`, `tmux-resurrect`, `tmux-continuum`,
-  `tmux-yank`, `tmux-better-mouse-mode`.
+`~/.config/tmux/tmux.conf` is a 12-line **dispatcher** that sources four layers
+and then TPM. `~/.tmux.conf` and `~/.tmux` are both symlinks into this directory
+(`~/.tmux` → `.config/tmux`, so `~/.tmux/plugins` IS `~/.config/tmux/plugins`).
 
-## Live state (verified via `tmux show-options -g`, not assumed)
+    tmux.conf                  dispatcher: sources the four layers below, then TPM
+    tmux-settings-global.conf  settings layer 1 — MANAGED baseline (@theme loadout1)
+    tmux-settings-user.conf    settings layer 2 — user choice, WINS (@theme loadout2)
+    tmux-global.conf           the bulk: bindings, plugin declarations, theme hook
+    tmux-user.conf             user overrides (currently only comments)
+    themes/tmux-theme-*.conf   the colour/style definitions themselves
+    word-separators.conf       GENERATED — do not edit by hand
+    scripts/                   helpers + the separator generator
 
-    status bar        fg #a6adc8  bg #1a1d2b         7.52:1    slate blue
-    session chip      fg #11111b  bg #89b4fa        8.91:1    blue block
-    active window     fg #11111b  bg #89b4fa bold   8.91:1    blue block
-    inactive window   fg #7f849c  bg #1a1d2b         4.53:1
-    activity flag     fg #fab387  bg #1a1d2b         9.46:1    peach
-    bell flag         fg #f38ba8  bg #1a1d2b bold    7.23:1    red
-    pane borders      fg #43704d                     3.66:1    dark green, single
-    active pane border fg #43704d bg #090909
+Sourcing order matters: settings layers first (so `@theme` exists before
+`tmux-global.conf` needs it), then the global layer, then the user layer, then
+TPM. `tmux-global.conf` deliberately does **not** source any settings file —
+doing so re-applied the user layer from inside the managed layer and made the
+ordering meaningless.
+
+## Theme selection
+
+`@theme` names a file: the value is interpolated into
+`themes/tmux-theme-<value>.conf`. Two exist:
+
+    loadout1   the original pre-2026-10-01 theme. ANSI slot names, so it resolves
+               against the TERMINAL palette; under catppuccin mocha the active
+               window renders at 1.19:1 — effectively invisible.
+    loadout2   current. Pinned literal hex.
+
+Change it in **`tmux-settings-user.conf`** (not the global one, which is the
+baseline and is overridden). `@theme` is re-declared every time the settings
+layer loads, so `set -g @theme` at runtime never sticks.
+
+Check what resolved with `tmux display-message -p '#{@theme}'` —
+`tmux show-options -g @theme` errors with "invalid option".
+
+## Live state (verified via `show-options`, not assumed)
+
+    status bar        fg #cdd6f4  bg #10173a         12.04:1   dark blue
+    session chip      fg #11111b  bg #89b4fa bold    8.91:1    blue block
+    active window     fg #11111b  bg #89b4fa bold    8.91:1    blue block
+    inactive window   fg #a6adc8  bg #10173a         7.82:1
+    activity flag     fg #fab387  bg #10173a         9.84:1    peach
+    bell flag         fg #f38ba8  bg #10173a bold    7.52:1    red
+    pane borders      fg #090909  bg #090909                   NO visible line
     active pane fill  window-active-style bg #090909 1.055:1
+    pane-border-lines heavy   (no visual effect while fg == bg)
+    pane-border-indicators off
+    word-separators   14206 bytes (generated)
+    TMUX_PLUGIN_MANAGER_PATH  ~/.tmux/plugins/
 
-Window formats carry `#I:#W` only — deliberately no `#F`. See "Flag clutter" below.
+Window formats carry `#I:#W` only — no `#F`. See "Flag clutter" below.
 
-## Why the colours are literal hex, not ANSI slot names
+## Why literal hex, not ANSI slot names
 
-The bar used to be `status-style bg=green` (tmux's own default, never chosen) with
-`window-status-current-style "fg=white bg=blue"`. Those are ANSI slot names, and tmux
-resolves them against the **terminal's palette**. Under catppuccin mocha that made
-`white` `#bac2de` and `blue` `#89b4fa` — both light — so the active window rendered at
-**1.19:1**. Effectively invisible.
+The bar used to be `status-style bg=green` (tmux's own default, never chosen)
+with `window-status-current-style "fg=white bg=blue"`. Those are ANSI slot names,
+which tmux resolves against the **terminal's palette**; under catppuccin mocha
+`white` and `blue` are both light, so the active window rendered at **1.19:1**.
+Literal hex makes the bar and grid identical on every machine this config is
+carried to, whatever the local palette is.
 
-Literal hex means the bar and the grid look identical on every machine this config is
-carried to, whatever that terminal's palette happens to be. That is the point: this
-config is shared across systems.
+The one non-portable value is the active-pane fill: `#090909` is only "slightly
+above the background" where the background is actually `#000000`. On a terminal
+whose bg is lighter it reads as a sunken hole. tmux has no "background + 8"
+operator, so that needs a per-system value or dropping `window-active-style`.
 
-The one value that is *not* portable is the active-pane fill. `#090909` is only "slightly
-above the background" where the terminal background is actually `#000000` (alacritty pins
-it there). On a terminal whose background is `#282c34` the fill is *darker* than the
-background and the active pane reads as a sunken hole rather than a raised block. tmux has
-no "background + 8" operator, so this needs a per-system value or omitting `window-active-style`
-entirely.
+## Pane appearance: no visible line, dividers by fill
 
-## Active pane: two cues, and each has a hole
+Both border styles set `fg` and `bg` to the same colour, so the box-drawing glyph
+is painted in the colour of the cell behind it and vanishes. The border CELL is
+still filled — with `#090909`, the active pane's own fill colour — so the divider
+reads as a faint band against the `#000000` panes.
 
-The active pane is marked by a **raised fill** (`window-active-style`) and by its border
-carrying the fill colour behind the line. Neither is sufficient alone:
+Accepted consequence: the active pane's fill is the same `#090909`, so it merges
+with the divider network and has no boundary of its own. It stays identifiable
+(interior `#090909` vs inactive panes' `#000000`) but nothing marks where it ends.
 
-- **The fill is masked by any program that paints its own background.** It only exists on
-  cells the program leaves at the terminal default. An `nvim` pane — or any full-screen
-  TUI with its own bg — shows *none* of it. On this machine that is easy to miss, because
-  the fill and the border cover for each other; a pane running a colourised editor has
-  only the border.
-- **The border is a 1px line.** It is legible here but it is thin by design.
+**The fill is masked by any program that paints its own background** — it only
+exists on cells a program leaves at the terminal default, so an `nvim` pane shows
+none of it, and with no line drawn there is no fallback cue in such a pane.
 
-If the cue ever needs to be unambiguous regardless of colour perception, the lever not yet
-tried is `pane-border-status top` plus a `pane-border-format` that inverts the active
-pane's title. It costs a row of height per pane, so the layout shifts.
+`pane-border-lines` has no visual effect while `fg == bg`. `heavy` is kept so
+that restoring a visible line starts from the thick one (measured when a line WAS
+visible: `single` = 1px strokes, `heavy` = 2px).
 
-## The border line is drawn whenever `fg` != `bg`
+## Word separators
 
-Setting `pane-active-border-style "fg=#090909 bg=#090909"` does **not** remove the line —
-tmux still draws the box-drawing glyph, it is simply painted the same colour as the cell
-behind it. `fg` controls the line; `bg` fills the cell. This was mistaken for "the line
-cannot be kept" once, during a round of colour experiments; it can.
+tmux takes a **literal** character list — no Unicode class, no ranges, no loops.
+Anything absent counts as word material, so prompt icons and TUI rules get
+swallowed by double-click selection.
 
-Verified by a 1-pixel scan across the active pane's left edge, which reads:
+So the ranges live in `scripts/tmux-word-separators` (a bash GENERATOR, run by
+hand) and its expanded output is checked in as `word-separators.conf`, which
+`tmux-global.conf` sources directly. Reloads therefore spawn no subprocess and
+depend on no interpreter.
 
-    [ #000000 neighbour ][ #090909 bg ][ 1px #43704d ][ #090909 bg ][ pane content ]
+    ~/.config/tmux/scripts/tmux-word-separators      # regenerate after changing ranges
 
-## Flag clutter
+Result: 3,812 characters / 14,206 bytes — emoji/pictographs, plus the three
+contiguous drawing blocks U+2500–U+25FF (box drawing, block elements, geometric
+shapes). Regenerating on AlmaLinux 8.10 produced a **byte-identical** file
+(sha `4056a921…`), which is what proves the generate path has no host coupling.
 
-`#F` in a window format expands the window flags. Its contributions were:
+## Persist autosave (systemd --user timer)
 
-- `*` current marker — redundant once the current window is a filled blue block
-- `-` last-used marker — removed on request; it is just noise in a status line
-- `#` activity — **cannot fire**: `monitor-activity` is off
-- `!` bell — **cannot fire**: `bell-action` is none, even though `monitor-bell` is on
+`tmux-persist` saves on clean detach/exit, so a hard crash while attached never
+fires the hook. `theredspoon/tmux-persist-autosave` closes that gap with a real
+OS timer.
 
-So `#F` was contributing only `*` and `-`. Both formats are now plain `#I:#W`. If activity
-or bell monitoring is ever turned back on, re-add just that flag with a conditional, e.g.
-`#{?window_bell_flag,!,}`. Zoom is covered by the separate `ZOOM` indicator on the right
-(`status-right`), not by `#F`'s `Z`.
+**It is NOT a tmux plugin** — no `*.tmux` entry point, and upstream's `install.sh`
+writes a macOS LaunchAgent. Do not add it to `@plugin`; TPM would clone a repo
+that can never run.
+
+    ~/.local/bin/persist-autosave.sh                          (8672 B, sha256 9d09827c…)
+    ~/.config/systemd/user/tmux-persist-autosave.service
+    ~/.config/systemd/user/tmux-persist-autosave.timer        OnCalendar=*:0/10
+
+The service deliberately does **not** set `PrivateTmp=yes`: the lock and the tmux
+socket both live under `/tmp`, and a private `/tmp` would hide them — the script
+would find no server and exit 0 having done nothing.
+
+It skips cleanly when there is no tmux server, no plugin, or no `save.sh`. It
+sources tmux-persist's own helpers for directory resolution and **aborts loudly**
+if their internal function names change upstream, rather than resolving a wrong
+path silently. It has a regression guard: a snapshot that suddenly has far fewer
+panes than its predecessor is reverted, with the degenerate one kept for
+forensics; bypass once with
+`touch <persist-dir>/<session>_last.allow_regression`.
+
+## Portability to EL8 (asked and answered)
+
+The config and scripts have **no distro coupling**: zero host/user-specific
+paths; only ubiquitous binaries (`tmux bash sh printf grep mktemp dirname date
+awk`); all five scripts pass `bash -n` on EL8's bash 4.4; `flock` is mentioned
+only in a comment; `readlink` is used without `-f`; lock ages use
+`stat -f … || stat -c …` (BSD then GNU).
+
+Requirements on a fresh box, all environmental: a current tmux (the theme uses
+`pane-border-indicators` and `pane-border-lines`; authored against 3.7b), the
+plugins installed (needs `git`), `nvim` for `bind-key v` only, and a UTF-8
+locale (the separator list is box-drawing + emoji).
+
+`systemctl --user` **works on EL8** — systemd 239 ships
+`/usr/lib/systemd/system/user@.service` with `ExecStart=-/usr/lib/systemd/systemd
+--user`. It fails only in contexts without a user bus (containers, root's shell,
+root cron) and needs `loginctl enable-linger <user>` on a headless box.
 
 ## Traps
 
-**A comma inside `#[...]` nested in `#{?...}` leaks literal text.** The conditional splits
-its own arguments on commas and does not protect the bracket. Writing
+**`source-file` paths are checked, not swallowed.** Every `source-file` in the
+tree is deliberately **without `-q`**, so a missing or misnamed file fails loudly.
+This is not theoretical: `tmux-global.conf` once built
+`themes/tmux_theme_loadout2.conf` while the files had been renamed
+`tmux-theme-loadout2.conf`, and with `-q` **no theme loaded at all** — the bar
+silently reverted to tmux's default green, and a reboot lost it. With `-q` gone,
+a typo in `@theme` is an error instead of a silent no-op.
 
-    #{?client_prefix,#[fg=#11111b bg=#fab387,bold],...}
+**A comma inside `#[...]` nested in `#{?...}` leaks literal text.** The
+conditional splits its own arguments on commas and does not protect the bracket.
+A prefix-indicator chip written that way printed a stray `bold]` on the status
+line. Space-separate the attributes inside `#[...]`.
 
-puts a stray `bold]` on the status line. Space-separate the attributes inside `#[...]`
-instead; tmux accepts either separator. This is documented inline in the config too.
+**The path in a `source-file -F` must be quoted.** Unquoted, the `#` in
+`#{@theme}` is read as the start of a comment when a CONFIG FILE is parsed and
+the line dies with `syntax error`. It works unquoted as a *shell command*, which
+is why it is easy to get wrong.
 
-**`status-right` is injected by tmux-continuum at runtime.** The plugin prepends its
-`#(...continuum_save.sh)` call, so `set -g status-right ""` in the config does not result
-in an empty `status-right`. The save script emits nothing, so it is invisible — but
-`status-right-length` is budgeting for it as well as for anything you add. Expect
-`tmux show-options -g status-right` to show the script even when the config does not.
+**`tmux source-file`, never a server restart.** tmux has no auto-reload (the
+`live_config_reload` option belongs to alacritty, not tmux). An invalid config is
+rejected and the running server keeps the previous one.
 
-**Reload with `tmux source-file`; never restart the server.** tmux has no auto-reload
-(the `live_config_reload` option in `alacritty-terminal.md` is alacritty's, not tmux's), so a
-running server keeps its current options until you `source-file`. Killing the server kills
-the panes you are working in. An invalid config is rejected by
-tmux's own validation and the running instance keeps the previous one, so a bad edit cannot
-wedge a live session — but a stale running server will not show a config file edit until
-you `source-file` it. Check with `tmux show-options -g <option>` rather than trusting the
-file.
+**A running server can be older than the config.** Compare
+`tmux display-message -p '#{pid}'` + `ps -o lstart=` against `stat` on the file.
+Observed here: server 09:46:43, config 09:54:12 — live options did not match the
+file until a `source-file`.
 
-**A running server can be older than the config.** `tmux display-message -p '#{pid}'` plus
-`ps -o lstart=` against `stat` on the file. Observed here: server started 09:46:43, config
-written 09:54:12, so the live options did not match the file at all until a `source-file`.
+**Flag clutter.** `#F` contributed only the `*` current marker (the blue block
+says that) and the `-` last-used marker. Its other two cannot fire as configured:
+`monitor-activity` is off and `bell-action` is none. Zoom is covered by the ZOOM
+indicator in `status-right`.
 
-## Verifying colour changes
+**tmux-persist's autosave needs `$TMUX` or a locale.** With neither, tmux's
+format engine silently mangles literal tabs to underscores and every saved layout
+comes out empty. The autosave script sets `$TMUX` itself for exactly this reason.
 
-Contrast is measured from a real screen grab, not from the config:
+## Verifying a colour change
 
-- Crop the bar or the border region and convert to text with
-  `magick <png> txt:-`, then compute WCAG contrast in a script. `magick` is present;
-  PIL and numpy are not available in the agent sandbox.
-- Colour census over a grab catches "did it apply at all":
-  `magick <png> -format '%c' histogram:info:-`.
-- Locate a border precisely by scanning a column range and counting exact colours.
-  Integer cell arithmetic drifts — use `round(cell * width / total_cells)`, not
-  integer division, or you will sample the wrong column (this produced a confidently
-  wrong "the border is not drawn" reading once).
+Measure from a real screen grab, not the config:
 
-## Capturing the terminal
+- `magick <png> txt:-` then compute WCAG contrast in a script (`magick` is
+  present; PIL/numpy are not in the agent sandbox).
+- `magick <png> -format '%c' histogram:info:-` for "did it apply at all".
+- Locate a border by scanning a column range for exact colours. Use
+  `round(cell * width / total_cells)` — integer division drifts (it produced a
+  confident false "the border is not drawn").
 
-**`shot.sh window` grabs whatever has focus.** It captured Firefox while the terminal was
-backgrounded, and the resulting image was sharp and plausible. Always confirm from the
-image that it is the window you asked for.
-
-The focus-independent path on this machine is **`spectacle -m`** — current monitor,
-no focus requirement:
+**Capturing the terminal:** `shot.sh window` grabs whatever has FOCUS, and once
+returned a sharp, plausible image of Firefox. The focus-independent path here is
+`spectacle -m` (current monitor, 3440x1440):
 
     spectacle -m -b -n -o /tmp/mon.png
 
-It writes a real file (3440x1440 here). Validate the artifact anyway: `spectacle -f`
-exits 0 and writes *no file at all*.
-
-`region`, `app` and `full` modes of `shot.sh` cannot work here — `xwininfo -root` reports
-`0x0` geometry.
+Validate the artifact anyway — `spectacle -f` exits 0 and writes no file at all.
 
 ## Rollback
 
 Restore the pre-change config and reload:
 
-    cp ~/.config/tmux/tmux.conf.bak-20261001-224614-prebar ~/.config/tmux/tmux.conf
+    cp ~/.config/tmux/tmux-global.conf.bak-<timestamp>-presource ~/.config/tmux/tmux-global.conf
     tmux source-file ~/.config/tmux/tmux.conf
 
-To revert only the active-pane fill, delete the `window-active-style` line. To revert only
-the bar colour, set `status-style` back to `"fg=#a6adc8 bg=#11111b"` **and** the three
-`window-status-*-style` backgrounds with it — they are separate hard-coded copies and will
-show as dark patches if changed alone.
+Theme: set `@theme` back in `tmux-settings-user.conf`. Bar background: the colour
+is repeated as `bg=` in three `window-status-*-style` options — change them
+together or the bar shows dark patches.
+
+Autosave: `systemctl --user disable --now tmux-persist-autosave.timer` and remove
+the three files (see `customizations.md` for the exact pair).

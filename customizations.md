@@ -3138,3 +3138,146 @@ active title, at the cost of a row of height per pane.
 
 The backup also records the pre-2026-10-01 state of the mouse bindings and the word
 separators, which were not touched here.
+
+
+## 2026-10-02 — tmux: the theme had silently stopped loading, and autosave arrived
+
+Affected: `~/.config/tmux/**` (outside this repo), `~/.local/bin/persist-autosave.sh`, and
+`~/.config/systemd/user/tmux-persist-autosave.{service,timer}`. Topic file rewritten: `tmux.md`.
+
+### Context
+
+The config was restructured by hand outside this repo into a dispatcher plus four layers:
+
+    tmux.conf  ->  tmux-settings-global.conf   managed baseline, @theme loadout1
+               ->  tmux-settings-user.conf     @theme loadout2, wins
+               ->  tmux-global.conf            bindings, plugin declarations, theme hook
+               ->  tmux-user.conf              user overrides
+               ->  TPM
+
+That restructure is not recorded in full here because it was not made through this repo.
+What follows is the defects found in it, and the fixes.
+
+### Defect 1 (worst): the theme never loaded at all
+
+`tmux-global.conf` built `themes/tmux_theme_#{@theme}.conf`, but the files had been renamed
+to `tmux-theme-<name>.conf` (hyphens). Every `source-file` carried `-q`, so the miss was
+silent: **no theme applied**, and the status bar fell back to tmux's default `bg=green` — the
+exact unreadable bar this repo already fixed once. Proof: a fresh server booted from the
+config resolved `status-style bg=green,fg=black`, and a valid sentinel style survived a
+`source-file` unchanged.
+
+Fix: `tmux_theme_` -> `tmux-theme-`, with the mismatch recorded in the comment at that line.
+
+### Defect 2: `-q` hid every other miss too
+
+Removing `-q` from every `source-file` turned three further silent misses into loud errors,
+which were then fixed:
+
+- the dispatcher referenced `tmux-global-settings.conf` / `tmux-user-settings.conf` while the
+  files were `tmux-settings-global.conf` / `tmux-settings-user.conf` (word order swapped),
+  and `tmux-user.conf` did not exist at all;
+- `tmux-settings.conf` was byte-identical to `tmux-settings-user.conf` and was being sourced
+  by `tmux-global.conf`, re-applying the user layer from inside the managed layer and making
+  the global/user ordering meaningless. Source line removed, duplicate file deleted.
+
+Policy now: no `-q` anywhere in the tree. A missing file must fail loudly.
+
+### Defect 3: the `scripts/` move left broken callers
+
+Three references still pointed at the pre-move flat paths: `bind-key 6` and `bind-key o` in
+`tmux-global.conf`, `scripts/tmux-popout.sh` line 87, and a comment in
+`scripts/shell-state-export.sh`. All repointed to `scripts/`.
+
+### Word separators: generator plus generated fragment
+
+The old design set `word-separators` via a `run-shell` script on every reload, alongside a
+separate inline `set -g word-separators` that the script then overwrote. Both were replaced:
+
+- `scripts/tmux-word-separators` is now a bash GENERATOR (hard-pinned `/bin/bash`) holding the
+  ranges compressed, writing the expanded literal to `word-separators.conf`;
+- `tmux-global.conf` sources `word-separators.conf` directly. No subprocess at load time, no
+  interpreter dependency, and the inline `set` line is gone.
+
+Result: 3,812 characters / 14,206 bytes, including the three contiguous drawing blocks
+U+2500-U+25FF (box drawing, block elements, geometric shapes) — the reason the script existed.
+
+### Persist autosave: installed as a systemd --user timer
+
+`tmux-persist` autosaves on clean detach/exit, so a hard crash while still attached never
+fires the hook. `theredspoon/tmux-persist-autosave` closes that with a real OS timer.
+
+**It is not a tmux plugin** — no `*.tmux` entry point, and its `install.sh` writes a macOS
+LaunchAgent. It was deliberately NOT added to `@plugin`; TPM would clone a repo that can never
+run. Upstream's README says Linux should wire `persist-autosave.sh` into a `systemd --user`
+timer instead.
+
+The script was read in full before install: no network, eval, or credential access; skips
+cleanly with no server/plugin/save.sh; `mkdir`-based single-flight lock (no `flock` dependency
+— the only mention is a comment); `readlink` without `-f`; lock age via `stat -f || stat -c`.
+It aborts loudly if tmux-persist's internal function names change upstream, instead of
+resolving a wrong path silently.
+
+Replayable pair:
+
+    # install
+    install -D -m 755 <downloaded> ~/.local/bin/persist-autosave.sh
+    # + the two unit files below, then:
+    systemctl --user daemon-reload
+    systemctl --user enable --now tmux-persist-autosave.timer
+
+    # uninstall
+    systemctl --user disable --now tmux-persist-autosave.timer
+    rm ~/.config/systemd/user/tmux-persist-autosave.timer \
+       ~/.config/systemd/user/tmux-persist-autosave.service \
+       ~/.local/bin/persist-autosave.sh
+    systemctl --user daemon-reload
+
+Source pinned: `https://raw.githubusercontent.com/theredspoon/tmux-persist-autosave/main/persist-autosave.sh`,
+sha256 `9d09827c2ce5f4baeefca3b932f94c63809cf895b25579c3e6ab1e502a4e7964` (8672 bytes).
+
+Units: `tmux-persist-autosave.timer` (`OnCalendar=*:0/10`, `Persistent=true`) driving
+`tmux-persist-autosave.service` (`Type=oneshot`,
+`ExecStart=%h/.local/bin/persist-autosave.sh`). The service deliberately does **not** set
+`PrivateTmp=yes`: the lock and the tmux socket both live under `/tmp`, and a private `/tmp`
+would hide them, making the script find no server and exit 0 having done nothing.
+
+Verified by forcing a tick: `systemctl --user start tmux-persist-autosave.service` returned
+`success` / status 0, and the journal recorded
+`save: 2026-10-02T20:45:13 done (1 sessions saved, 0 reverted, 0 guard-skipped)`.
+
+### EL8 portability (asked directly, answered with tests)
+
+The config and scripts have no distro coupling:
+
+- zero host/user-specific paths — no `/home/*`, username, `/run/user/*`, `/opt/homebrew`;
+- only ubiquitous binaries: `tmux bash sh printf grep mktemp dirname date awk`;
+- all five scripts pass `bash -n` under AlmaLinux 8.10's bash 4.4.20, and `mapfile` exists;
+- regenerating the separator list on EL8 produced a byte-identical file (sha `4056a921…`),
+  the strongest evidence that the generate path has no host coupling.
+
+Requirements on a fresh box are all environmental: a current tmux (the theme uses
+`pane-border-indicators` and `pane-border-lines`; authored against 3.7b), the plugins
+installed (needs `git`), `nvim` for `bind-key v` only, and a UTF-8 locale.
+
+`systemctl --user` **works on EL8**: systemd 239 ships
+`/usr/lib/systemd/system/user@.service` with `ExecStart=-/usr/lib/systemd/systemd --user`. It
+fails only where there is no user bus (containers, root's shell, root cron) and needs
+`loginctl enable-linger <user>` on a headless box. That container failure is easy to mistake
+for an EL8 limitation; it is not one.
+
+### Verification
+
+- `tmux source-file ~/.config/tmux/tmux.conf` -> clean, no errors.
+- Fresh server on a throwaway socket -> `@theme=loadout2`,
+  `status-style fg=#cdd6f4 bg=#10173a`, `pane-border-style fg=#090909 bg=#090909`,
+  `window-active-style bg=#090909`, `word-separators` 14,206 bytes.
+- Theme switch: `@theme=loadout1` -> `pane-active-border-style bg=red fg=red`; `loadout2` ->
+  `fg=#090909 bg=#090909`.
+- Timer: `list-timers` shows the next fire; a forced tick saved 1 session.
+
+### Rollback
+
+Config: restore `~/.config/tmux/tmux-global.conf.bak-<timestamp>-presource` and
+`tmux source-file`. Theme: set `@theme` back in `tmux-settings-user.conf`. Autosave: the
+uninstall pair above.

@@ -50,10 +50,14 @@ Then read the topic file for the area you are touching:
   from wezterm, the palette switcher, the pinned `#000000` background, the live-reload
   rules, and the IPC-socket trap. **Resume point: palette tuning.** Never `pkill
   alacritty` — it kills the instance being worked in and live reload makes it pointless.
-- `tmux.md` for the tmux status bar and pane grid: pinned hex rather than ANSI slot
-  names (slot names resolve against the terminal palette, which is how the active window
-  ended up at 1.19:1), the active-pane cues and their limits, the `#[...]`-inside-`#{?...}`
-  comma trap, and `spectacle -m` as the focus-independent capture path. Reload with
+- `tmux.md` for the tmux setup: a LAYERED config (dispatcher, then
+  tmux-settings-global.conf, tmux-settings-user.conf, tmux-global.conf, tmux-user.conf,
+  then TPM), theme selection via `@theme`, pinned hex rather than ANSI slot names (slot
+  names resolve against the terminal palette, which is how the active window ended up at
+  1.19:1), lineless pane dividers marked by fill, the word-separator generator, the
+  persist-autosave systemd timer, and the EL8 portability verdict. Every `source-file` is
+  deliberately WITHOUT `-q`, so a missing file fails loudly — a misnamed theme file once
+  meant no theme loaded at all and a reboot reverted the bar. Reload with
   `tmux source-file`, never a server restart.
 
 ## Hard Rules
