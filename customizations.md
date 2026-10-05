@@ -3357,3 +3357,80 @@ Rollback: the undo command above, or stop `plasmazones.service`, remove the
 `SnapAssist` block from `~/.config/plasmazones/config.json`, and start it again.
 
 Detail: [desktop-environments.md](desktop-environments.md)
+
+## 2026-10-04 — Chrome moved to native Wayland; taskbar pin corrected
+
+Two coupled changes, both recorded in detail in [chrome-fixes.md](chrome-fixes.md).
+
+### 1. Dropped `--ozone-platform=x11`; Chrome now runs native Wayland
+
+Reported as: "why am I not on the happy path everyone else is using?" The flag
+was inherited from Canary-era work on 2026-09-07 and had never been re-tested
+against a current Chrome. The existing notes already refuted the hardware-blame
+premise ("native Wayland Chrome Canary is stable when ANGLE is forced to its
+OpenGL backend"), and the flag had only ever been justified by a muted,
+disposable-profile probe. Chrome has since moved from ~140 to 154 and the
+driver from 610.57.04 to 615.71.09.
+
+Tested in two gates. Gate 1 used a disposable profile and the real binary
+directly, because `/usr/bin/google-chrome-stable` prepends `chrome-flags.conf`
+and would have silently re-injected the x11 flag and proved nothing. Gate 2 was
+the real playback test after quitting Chrome.
+
+~/.config/chrome-flags.conf
+      --use-angle=gl
+
+Verified after ~12 minutes including 4K: GPU process uptime 11:49 with
+`--gpu-recent-crash-count=0`, flags `--ozone-platform=wayland --use-angle=gl`,
+0 of 36 renderers carrying `--disable-gpu-compositing`, and 0 new crash dumps
+(newest overall is still 2026-09-14). The user confirmed smooth playback.
+
+`--use-angle=gl` stays load-bearing; only the platform flag was removed. The
+`is not compatible with Vulkan` warning still fires and is **benign** with
+ANGLE-GL — Vulkan is only Chrome's default backend. It is not a reason to
+re-add the x11 flag.
+
+Also recorded, previously missing entirely: the user did test the old XWayland
+baseline and the YouTube stutter was gone. That result had never been written
+down, which is why the flag later looked unjustified.
+
+Backup: `~/.config/chrome-flags.conf.bak-x11-removal-20261004-225738`
+
+Rollback: restore that file and restart Chrome, then also reset the taskbar pin
+(below) or the pinned icon will not match the window.
+
+### 2. Taskbar pin corrected to `applications:google-chrome.desktop`
+
+Reported as: a running Chrome "takes up a new icon space" instead of using the
+pinned item's space. The pin was `applications:com.google.Chrome.desktop`, the
+`NoDisplay=true` desktop file that exists to match a Wayland `app_id` of
+`com.google.chrome`. Chrome's actual `app_id` is `google-chrome`, so the pin
+never matched and Plasma kept both entries.
+
+Resolution order is in `plasma-workspace/libtaskmanager/tasktools.cpp`
+(`windowUrlFromMetadata`): an X11 window is matched by `StartupWMClass` against
+`WM_CLASS`, with `sortServicesByMenuId()` breaking the tie toward the entry
+whose `menuId` starts with that string; a Wayland window skips that step and
+matches `appId` against `StartupWMClass` / `desktopEntryName()`. Both paths
+resolve to `google-chrome.desktop` here.
+
+```ini
+~/.config/plasma-org.kde.plasma.desktop-appletsrc
+[Containments][2][Applets][5][Configuration][General]
+launchers=applications:systemsettings.desktop,applications:org.kde.discover.desktop,preferred://filemanager,applications:google-chrome.desktop,applications:io.github.Qalculate.qalculate-qt.desktop,applications:org.wezfurlong.wezterm.desktop,applications:com.shellyorg.shelly.desktop
+```
+
+Verified by pixel-column slot counting on a cropped panel capture: 10 slots
+before (duplicate Chrome at the end) and 9 after, with Chrome in its pinned
+4th position. All 7 pins intact.
+
+Backup: `~/.config/plasma-org.kde.plasma.desktop-appletsrc.bak-chrome-pin-20261004-*`
+
+**Trap worth keeping:** `launchers` is a *list*. Reading it with
+`readConfig("launchers", "")` returns a comma-joined string that looks correct
+and survives a `print()`, which is how a first attempt wrote a string into the
+key and made Plasma silently drop 4 pins. Do **not** verify it with
+`Array.isArray()` — Plasma's QJSEngine returns a `QVariantList` wrapper, so
+that returns `false` even for the healthy value. Check `length` (7, not ~120)
+and that `v[0]` is a whole launcher URL rather than a single character; then
+write back a native JS array. Exact snippets in chrome-fixes.md.
