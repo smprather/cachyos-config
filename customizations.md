@@ -3281,3 +3281,79 @@ for an EL8 limitation; it is not one.
 Config: restore `~/.config/tmux/tmux-global.conf.bak-<timestamp>-presource` and
 `tmux source-file`. Theme: set `@theme` back in `tmux-settings-user.conf`. Autosave: the
 uninstall pair above.
+
+## 2026-10-03 — PlasmaZones Snap Assist disabled
+
+Reported symptom: dragging a window into the right zone of the 2-zone left/right
+`Columns (2)` layout *sometimes* raised a popup asking which window to put in the
+left half, including when the pointer was nowhere near a screen edge. The working
+assumption was KWin native tiling bleeding through.
+
+That assumption was wrong. The popup is PlasmaZones' own Snap Assist overlay
+(`SnapAssistContent`, animation profile `popup.snapAssist.show`), not a KWin
+surface. Journal evidence from 10:39:25:
+
+    endDrag: "com.google.chrome|a4ee5432-..." cursor= 2322 148 cancelled= false
+    commitSnap: "com.google.chrome|a4ee5432-..." zones= QList("{05b9766b-...}") intent= user
+    shader leg start: path="popup.snapAssist.show" ...
+    showSnapAssist: screen= "Dell Inc.:DELL S3425DW:825314902" zones= 1 candidates= 1
+
+KWin native tiling was already disabled and confirmed off at runtime
+(`electricBorderTiling: false`, `electricBorderMaximize: false`, both `[Tiling]`
+arrays empty), so nothing KWin-side was involved.
+
+Why "sometimes" — the real trigger condition. PlasmaZones first gates the overlay
+on `snapAssistFeatureEnabled`, then on there being at least one empty zone plus at
+least one eligible candidate window; its own log strings are `showSnapAssist:
+feature disabled` and `showSnapAssist: no empty zones or candidates`. Candidate
+filtering excludes minimized windows, other desktops/activities, rule-excluded
+windows, already-snapped windows, and other monitors. On a 2-zone layout this
+reduces to: the picker appears when a user-intent snap fills one half while the
+other half is still empty — normally the first window of a pair. `intent= auto`
+placements (windows auto-assigned as they open) never trigger it. The
+2026-09-20..10-03 journal window held 85 `commitSnap` events and only 3
+`showSnapAssist` events, matching that reading.
+
+The "not near the edge" detail is irrelevant to PlasmaZones: it is region-based
+(the cursor was at x=2322 on a 3440-wide screen, well inside the right zone),
+whereas edge proximity is a KWin quick-tile concept.
+
+Replayable command pair (the first line was applied):
+
+    # disable / redo
+    qdbus6 org.plasmazones /PlasmaZones \
+      org.plasmazones.Settings.setSetting snapAssistFeatureEnabled false
+
+    # undo / re-enable
+    qdbus6 org.plasmazones /PlasmaZones \
+      org.plasmazones.Settings.setSetting snapAssistFeatureEnabled true
+
+`setSetting` takes a `QDBusVariant`; the bare `false` literal is accepted and the
+call returns `true` on success. `snapAssistEnabled` was deliberately left `true`:
+`snapAssistFeatureEnabled` is the master gate (PlasmaZones whatsnew 1.11.3,
+"Master toggle for snap assist") and short-circuits first. `snapAssistTriggers`
+(`modifier 0 / mouseButton 4`) and `snapAssistGraceMs` (150) were not touched.
+
+Affected files:
+
+- `~/.config/plasmazones/config.json` — gained
+  `Snapping.Behavior.SnapAssist.FeatureEnabled: false`. The daemon wrote this
+  itself; the key did not exist before the change. The file is daemon-owned, so
+  it should be edited only through the D-Bus API or with the service stopped.
+
+Verification:
+
+    qdbus6 org.plasmazones /PlasmaZones \
+      org.plasmazones.Settings.getSetting snapAssistFeatureEnabled   # -> false
+    grep -n SnapAssist ~/.config/plasmazones/config.json             # -> "FeatureEnabled": false
+
+The daemon logged `Settings save completed` and `getAllSettings` reports the new
+value, so the change is live and persisted. No service restart was performed; the
+gate is evaluated at request time. End-to-end confirmation is the next drag into
+a zone with the other half empty (expect no `popup.snapAssist.show` in the
+journal) — still outstanding at the time of writing.
+
+Rollback: the undo command above, or stop `plasmazones.service`, remove the
+`SnapAssist` block from `~/.config/plasmazones/config.json`, and start it again.
+
+Detail: [desktop-environments.md](desktop-environments.md)

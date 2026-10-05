@@ -442,6 +442,143 @@ cp -p ~/.config/kwinrc.bak-pz-only-20260916 ~/.config/kwinrc
 
 Then log into Plasma again.
 
+### Snap Assist disabled
+
+Configured and applied 2026-10-03 with PlasmaZones 3.4.19.
+
+Dragging a window into one half of the 2-zone `Columns (2)` layout sometimes
+raised a window picker asking what to put in the other half. It was mistaken for
+KWin tiling bleed-through; it is PlasmaZones' own Snap Assist overlay
+(`popup.snapAssist.show`), an Aero-Snap-style picker that fills empty zones
+(PlasmaZones whatsnew 1.13.0).
+
+It fires only for a user-intent zone drop (`commitSnap ... intent= user`) that
+leaves at least one zone empty, with at least one eligible candidate window.
+PlasmaZones' own gates are logged as `showSnapAssist: feature disabled` and
+`showSnapAssist: no empty zones or candidates`. On a 2-zone layout that means it
+appears when the first window of a pair is dropped while the other half is still
+empty, and it never appears for `intent= auto` placements. Between 2026-09-20 and
+2026-10-03 the journal held 85 `commitSnap` and only 3 `showSnapAssist` events.
+
+This is independent of the KWin native tiling work above: PZ placement is
+region-based, so the popup appeared even when the pointer was nowhere near a
+screen edge.
+
+The desired end state is that it never appears. It is disabled through the
+daemon's D-Bus API:
+
+```bash
+qdbus6 org.plasmazones /PlasmaZones \
+  org.plasmazones.Settings.setSetting snapAssistFeatureEnabled false
+```
+
+`setSetting` takes a `QDBusVariant`; the bare `false` literal is accepted and the
+call returns `true` on success. `snapAssistEnabled` is left `true` — it is not the
+master gate (PlasmaZones whatsnew 1.11.3, "Master toggle for snap assist") and the
+feature gate short-circuits first. `snapAssistTriggers` (currently `modifier 0 /
+mouseButton 4`) and `snapAssistGraceMs` (150) are likewise left alone.
+
+Verify:
+
+```bash
+qdbus6 org.plasmazones /PlasmaZones \
+  org.plasmazones.Settings.getSetting snapAssistFeatureEnabled
+grep -n SnapAssist ~/.config/plasmazones/config.json
+```
+
+The daemon persists this itself into `~/.config/plasmazones/config.json` as
+`Snapping.Behavior.SnapAssist.FeatureEnabled`. That file is daemon-owned; edit it
+only through the D-Bus API or with the service stopped.
+
+Rollback:
+
+```bash
+qdbus6 org.plasmazones /PlasmaZones \
+  org.plasmazones.Settings.setSetting snapAssistFeatureEnabled true
+```
+
+Runtime end-to-end confirmation (no `popup.snapAssist.show` in the journal after a
+drag into a zone with the other half empty) was still outstanding at the time of
+writing.
+
+### Maximize is lost across a minimize cycle on a snapped window
+
+Verified 2026-10-03 with PlasmaZones 3.4.19 and KWin 6.7.5 on the Dell
+ultrawide, snapping mode + `Columns (2)`.
+
+Symptom: maximize a window, minimize it, un-minimize it, and it comes back in
+its **zone** rather than maximized.
+
+This is PlasmaZones' own minimize-float cycle, not KWin, and it is deterministic
+on a zone-snapped window:
+
+1. Minimizing a snapped window makes PZ **float** it so the zone slot is freed.
+   The daemon logs the zone it is holding on to:
+   `Saved pre-float zones for "<id>" -> QList("{<zone>}")`.
+2. Un-minimizing **restores** the window to that saved zone. The effect logs
+   `Snap: window unminimized, unfloating: "<id>"` followed by
+   `slotApplyGeometryRequested: ... geo: QRect(<zone rect>) zoneId: "{<zone>}"`
+   while `currentFrame` is still the maximized rect.
+3. Every snap placement deliberately clears KWin's maximize bit, because a
+   surviving maximize would fight the zone rect:
+   `Demoting KWin maximize for snap placement of "<id>" into QRect(...)`
+   (source: `demoteMaximizeForSnapPlacement`, issue #1036).
+
+PZ saves the zone assignment across the cycle but captures **no maximize
+state**: `Control.getFullState` window records carry only `windowId`,
+`screenId`, `zoneId`, and `isFloating`. Snapping mode also has no maximize
+interception — the effect declines it explicitly (`Maximize interception:
+declining "<id>" — not a tiled window, KWin keeps the request`); per-mode
+maximize exists for scrolling only, and the project's own
+`docs/maximize-intercept-plan.md` records snapping's answer as an open question
+("snapping has no such state today").
+
+Measured, on a probe window snapped to the right zone
+(`getWindowInfo`: `maximizeHorizontal`/`maximizeVertical`):
+
+| step | geometry | maximize H/V |
+| --- | --- | --- |
+| snapped, free | 400,400 600x500 | 0 / 0 |
+| after maximize | 0,0 3440x1394 | 2 / 1 |
+| after minimize | 0,0 3440x1394 | 2 / 1 (minimized) |
+| after un-minimize | 1721,0 1719x1394 | **0 / 0** |
+
+The control case isolates the cause: an identical **floating** window (not
+zone-snapped, so PZ never minimize-floats it) went through the same three steps
+and came back at 2 / 1 — still maximized.
+
+There is no setting for this. PZ always minimize-floats a snapped window, with
+no opt-out, and snapping has no pre-maximize slot to restore from. Current
+version is 3.4.19 and it is the newest tag, so there is no upgrade path. No
+matching upstream issue exists (nearest is #1036, which introduced the demote);
+it is an unreported gap.
+
+Workarounds:
+
+- Toggle the window to floating first (`Meta+F`, `toggleWindowFloatShortcut`)
+  before minimizing; a floating window keeps its maximize. Clunky, and the
+  window leaves its zone while floating.
+- Re-maximize after restoring. Nothing is lost except the maximize state.
+
+A bug report was filed upstream on 2026-10-03 as a **Discussion** (the repo
+disables blank issues and routes bug reports to
+`discussions/new?category=bug-reports`):
+
+- https://github.com/fuddlesworth/PlasmaZones/discussions/1131
+
+The posted text is kept verbatim at
+[plasmazones-maximize-minimize-report.md](plasmazones-maximize-minimize-report.md).
+It includes the control case, the journal excerpt, and the source-level
+references. Watch that discussion for a fix; if one lands, re-verify the table
+above and then delete this section.
+
+Reproduce non-destructively with `qdbus6 org.kde.KWin /KWin
+org.kde.KWin.getWindowInfo <uuid>` for observation
+(`maximizeHorizontal`/`maximizeVertical` are 2 / 1 when fully maximized) and a
+throwaway window driven by a KWin script (`org.kde.kwin.Scripting.loadScript`
+then `org.kde.kwin.Script.run` on `/Scripting/Script<id>`; the maximize method
+is `setMaximize(bool,bool)`, and matching is by `resourceClass`).
+
 ## Secret storage
 
 The two desktops ship competing secret stores. They were consolidated onto
