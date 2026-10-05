@@ -9,9 +9,13 @@ Wayland** (no XWayland):
 google-chrome 154.0.8037.97-1
 ```
 
-Chrome Canary was removed after YouTube playback in Plasma Wayland showed GPU
-process instability. Its profile data under `~/.config/google-chrome-canary/`
-was not deleted.
+Chrome Canary is **not installed and should not be reinstalled**: its GPU
+process repeatedly died under `--ozone-platform=wayland` on this NVIDIA machine,
+which caused the YouTube stutter that led to dropping it. That defect belonged
+to that specific build plus the 610.57.04 driver, so re-test rather than
+assuming it still holds. Its profile and cache remain on disk, referenced by
+nothing: `~/.config/google-chrome-canary/` (6.1G) and
+`~/.cache/google-chrome-canary/` (1.6G).
 
 Stable Chrome reads user flags from:
 

@@ -27,6 +27,7 @@ reasoning needed to avoid known integration failures.
 - [GNOME configuration](gnome-configuration.md) — keyboard repeat, FancyZones-style drag tiling, an ungrouped current-workspace taskbar, GNOME Tweaks runtime isolation, and Python-tool installation policy
 - [DeepSeek Harness](deepseek-harness.md) — the `dsh` agent harness: npm install, provider routes to Ollama Cloud/OpenRouter, profile modes, and the no-TUI finding
 - [tmux](tmux.md) — the layered config and `@theme` selection, pinned-hex status bar, lineless pane dividers marked by fill, the word-separator generator, the persist-autosave systemd timer, and the EL8 portability verdict
+- [Engineering Loadout relocation](engineering-loadout-path.md) — why loadout tools shadowed coreutils/bash/node, relocating EL to `~/.loadout` with `--dest-dir`, the distribution-first PATH policy, and the persistent `dest_dir` config
 
 ## Provenance
 

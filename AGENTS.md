@@ -118,6 +118,49 @@ Then read the topic file for the area you are touching:
 - Preserve unrelated local changes. This repo commonly has many unstaged
   documentation files.
 
+## Record Net State, Not the Install/Remove History
+
+A `.desktop` note or a package row should read as **"this is what is true now"**,
+not as a diary. When something was installed and then later removed for ordinary
+reasons, delete the install record entirely — do not leave a section that
+documents installing a thing that is not there. A reader reconstructing this
+machine should never have to replay a removal to learn that the thing is absent.
+
+The one exception is a **noteworthy bug or blocker that caused the removal**. Keep
+that, because it prevents the mistake from being repeated, but record it as a
+prohibition rather than as chronology. `asusctl` is the pattern: it is not
+installed, the section is titled "Do not install asusctl or rog-control-center",
+and it explains the hardware mismatch and the `shelly install` command that would
+reintroduce them. It does not narrate the install.
+
+The same applies to the *shape* of a note:
+
+- Prefer "X is the active Y; do not install Z, because …" over
+  "installed Z; then removed Z".
+- Where a later change supersedes an earlier one, mark the stale reference
+  inline rather than leaving two contradictory instructions in the file.
+  Superseded filenames get an explicit "this no longer exists" pointer.
+
+### Distinguish a documented undo from an applied removal
+
+This is the single easiest way to misread this repo. Every install is required to
+record its **undo command** as a replayable pair, so `sudo pacman -Rns <pkg>`
+appears constantly. That line is usually **the documented rollback, not a record
+of a removal that happened.**
+
+`pacman -Q <pkg>` decides it. `okular`, `pinta`, `klayout`, `graphviz`, `zed`,
+`gwenview`, `earlyoom` and many others appear in this repo as both `-Syu` and
+`-Rns`, yet all are installed right now — the `-Rns` is their undo line. Before
+concluding that anything was removed, check the live system; a user-local or
+cargo install will not show up under `pacman -Q` at all (`tmux`, `btm`,
+`nvglances`, `yq` are all `~/.local/bin` or `~/.cargo/bin` binaries).
+
+Verify against the machine before writing any of this down. Also beware the two
+shell traps that produced the most false findings during the 2026-10-04 review:
+`test -e '~/.config/x'` does **not** expand the tilde inside single quotes, and
+`pacman -Qq` on a cargo-installed tool reports "absent" for a tool that is
+present and on `PATH`.
+
 ## Plasma-Specific Notes
 
 - Plasma should be available through `/usr/share/wayland-sessions/plasma.desktop`.

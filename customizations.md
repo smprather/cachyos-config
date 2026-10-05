@@ -246,17 +246,25 @@ entries below.
 - Rollback: `cp ~/.config/chrome-canary-flags.conf.bak-20260907-121005 ~/.config/chrome-canary-flags.conf`
 - Detail: [chrome-fixes.md](chrome-fixes.md)
 
-### Switched daily browser from Chrome Canary to Google Chrome Stable
+### Daily browser is Google Chrome Stable; Chrome Canary is not installed
 
-- Installed `google-chrome 152.0.7977.82-1` from `chaotic-aur`.
-- Removed `google-chrome-canary 154.0.8035.0-1`.
-- Left Canary profile data under `~/.config/google-chrome-canary/` intact.
-- Added Stable Chrome flags in `~/.config/chrome-flags.conf`:
-  `--use-angle=gl` and `--ozone-platform=x11`.
-- Stable Chrome launcher: `google-chrome-stable`.
-- Rollback: reinstall Canary with `sudo pacman -Syu --needed google-chrome-canary`
-  and remove Stable with `sudo pacman -Rns google-chrome`.
-- Detail: [chrome-fixes.md](chrome-fixes.md)
+- Net state: `google-chrome` (154.0.8037.97-1, from `chaotic-aur`) is the only
+  installed Chrome. Launcher: `google-chrome-stable`.
+- **Do not reinstall Chrome Canary.** Its GPU process repeatedly died with
+  `SIGSEGV` in NVIDIA's `libnvidia-glcore.so` under
+  `--ozone-platform=wayland` on this machine, which caused the YouTube stutter
+  that led to dropping it. That defect belonged to that specific build plus the
+  610.57.04 driver, so re-test rather than assuming it still holds. Full
+  diagnosis in [chrome-fixes.md](chrome-fixes.md).
+- Flags live in `~/.config/chrome-flags.conf` and now contain only
+  `--use-angle=gl`; Chrome runs native Wayland since 2026-10-04. The platform
+  flag is coupled to the taskbar pin — read chrome-fixes.md before changing it.
+- Canary data left on disk, referenced by nothing: `~/.config/google-chrome-canary/`
+  (6.1G) and `~/.cache/google-chrome-canary/` (1.6G), roughly 7.7G total. Delete
+  both if the space is wanted.
+- The stale `~/.local/share/applications/google-chrome-canary.desktop` launcher
+  was removed on 2026-10-04: it survived the uninstall and pointed at an absent
+  `/usr/bin/google-chrome-canary`.
 
 ## 2026-09-04
 
@@ -493,32 +501,17 @@ entries below.
   transaction. To remove Go only, run `sudo pacman -Rns go` after reviewing
   Pacman's proposed removals.
 
-### yq added to the standard tools
+### yq comes from the Engineering Loadout, not Pacman
 
-- Installed `yq` 4.1.2-1 from Arch `extra` with its required
-  `python-tomlkit` and `python-xmltodict` dependencies, using
-  `sudo pacman -Syu --needed --noconfirm yq`.
-- Pacman created root Snapper snapshot 95 before the transaction and snapshot
-  96 after it. Added `yq` to [standard-tools.md](standard-tools.md).
-- Verify with `pacman -Q yq` and `yq --version`.
-- Rollback: use Snapper snapshot 95 to revert the complete package
-  transaction. To remove yq only, run `sudo pacman -Rns yq` after reviewing
-  Pacman's proposed removals.
-
-### Pacman yq removed in favor of Engineering Loadout
-
-- Removed the Arch `yq` 4.1.2-1 package and its now-unused
-  `python-tomlkit` and `python-xmltodict` dependencies with
-  `sudo pacman -Rns --noconfirm yq`.
-- The package's `yq` command conflicted semantically with the intended
-  Engineering Loadout tool at `~/.local/bin/yq`, which is first in `PATH` and
-  reports Mike Farah yq v4.53.3. Engineering Loadout is the intended source;
-  do not add a Pacman `yq` entry to [standard-tools.md](standard-tools.md).
-- Pacman created root Snapper snapshot 97 before removal and snapshot 98
-  after it. Verify with `pacman -Q yq` (expected: not found) and
-  `yq --version` (expected: Engineering Loadout's active command).
-- Rollback: use Snapper snapshot 97 to revert the whole removal transaction.
-  To restore only the Arch package, run `sudo pacman -Syu --needed yq`.
+- Net state: the active `yq` is Mike Farah yq v4.53.3 from the Engineering
+  Loadout at `~/.local/bin/yq`, which is first in `PATH`.
+  `pacman -Q yq` reports not-found, and that is the correct steady state.
+- **Do not install a Pacman `yq`.** The Arch package ships a command of the same
+  name, and which one `PATH` resolves to silently changes the behaviour of
+  every `yq` invocation on the machine. [standard-tools.md](standard-tools.md)
+  must therefore never gain a Pacman `yq` entry.
+- Verify with `pacman -Q yq` (expected: not found) and `yq --version` (expected:
+  `yq (https://github.com/mikefarah/yq/) version v4.53.3`).
 
 ## 2026-09-11
 
@@ -1231,9 +1224,12 @@ entries below.
   `~/.config/bottom` if it was created. No system package or boot change is
   involved.
 
-### Removed asusctl and rog-control-center (not applicable hardware)
+### Do not install asusctl or rog-control-center (wrong hardware)
 
-- Symptom: `rog-control-center` exited immediately with
+Net state: neither package is installed, and nothing on this machine should
+install them. Recorded here so they are not re-added.
+
+- `rog-control-center` exits immediately on launch with
   `[ERROR rog_control_center] Could not get asusd version: ... "The name is not
   activatable". Is asusd.service running?`
 - Root cause is the hardware, not a configuration fault. This machine is a
@@ -1259,17 +1255,12 @@ entries below.
 - No overclocking benefit: asusctl drives ASUS-specific CPU multiply/power
   limits. It has no path for Zen 3 or for Gigabyte VRM control, and the GPU is
   NVIDIA, which is controlled through NVML instead.
-- Command: `sudo pacman -Rns --noconfirm asusctl rog-control-center`
-  (freed 42.42 MiB). Removed cleanly with no reverse dependencies; there was no
-  `asusctl` group or sudoers drop-in to clean up.
+- Do **not** re-run `/usr/bin/shelly install standard
+  rog-control-center --ui-mode`; it reinstalls both packages and reintroduces
+  the broken launcher above.
 - Verified: `asusctl`, `asusd`, and `rog-control-center` are all absent from
   `PATH`; `systemctl list-unit-files | grep -i asus` returns nothing; no asus
   entries remain in `/usr/share/dbus-1/system.d/`.
-- Snapper snapshots 145/146 bracket the transaction. Snapshots 143/144 are the
-  matching install pair from `/usr/bin/shelly install standard
-  rog-control-center --ui-mode`.
-- Rollback: `sudo snapper rollback 145` reverts the package transaction, or
-  re-run `/usr/bin/shelly install standard rog-control-center --ui-mode`.
 
 ## 2026-09-29 — wezterm/tmux: shift-double-click selects a word inside tmux
 
@@ -1545,7 +1536,12 @@ selected by a plain double-click (tmux).
 
 - wezterm's `config.selection_word_boundary` has the same stop-character meaning
   as tmux's `word-separators`. Its default is `" \t\n{}[]()\"'`"`.
-- `~/.config/tmux/tmux-word-separators` is now the single source of truth. It
+- `~/.config/tmux/tmux-word-separators` was the single source of truth at the
+  time of this entry. **Superseded:** that file no longer exists. The ranges now
+  live in the generator `~/.config/tmux/scripts/tmux-word-separators` and its
+  output is checked in as `~/.config/tmux/word-separators.conf`, which
+  `tmux-global.conf` sources. See the 2026-10-02 tmux entry and
+  [tmux.md](tmux.md).
   gained a `--print` mode that writes the string to stdout with no trailing
   newline; the default mode still sets the global tmux option.
 - `~/.config/wezterm/wezterm.lua` calls it via `io.popen` and assigns the result
@@ -1680,13 +1676,19 @@ wezterm logs a config error and still exits 0 for a bad name -- the check is
 "stderr is empty", not the exit status.
 
 Deliberately out of scope: starship, bat, eza and fzf were left untouched. There
-is no `~/.config/starship.toml` at all, so starship is running on its built-in
-default preset, and there are no bat/eza/fzf theme configs and no `BAT_THEME` or
-`FZF_DEFAULT` settings in the shell rc. There was therefore nothing to
-*coordinate* with, and creating configs for four tools would have meant writing a
-prompt configuration whose current shape is not visible in any file on this
-machine -- a good way to break a working shell. If a coordinated theme is wanted
-later, the honest first step is finding how the prompt is currently being
+are no bat/eza/fzf theme configs and no `BAT_THEME` or `FZF_DEFAULT` settings in
+the shell rc. Starship does have a config, at
+`~/.config/starship/starship.toml` (1,465 bytes) — note the **subdirectory**, not
+`~/.config/starship.toml`; starship searches for the subdirectory form and loads
+it, verified with `STARSHIP_LOG=trace starship prompt`. It is nevertheless not
+initialised by any shell init file checked here (bashrc, zshrc, profile,
+bash_profile, bash_login, zprofile, fish, `/etc/bash.bashrc`,
+`/etc/profile.d`, `~/.config/environment.d`), so it is not what draws the
+interactive prompt. There was therefore nothing to *coordinate* with a
+screenshot-capture theme, and creating configs for four tools would have meant
+writing a prompt configuration whose current shape is not visible in any file on
+this machine -- a good way to break a working shell. If a coordinated theme is
+wanted later, the honest first step is finding how the prompt is currently being
 produced, not guessing at it.
 
 `config.adjust_window_size_when_changing_font_size = false` was deliberately
