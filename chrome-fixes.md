@@ -118,10 +118,67 @@ Verified after ~12 minutes including 4K playback:
 | New crash dumps | 0; newest overall is still 2026-09-14 |
 | Playback | user-confirmed smooth, no stutter, incl. 4K |
 
+Follow-up soak, recorded later the same session: the **same** GPU process
+(PID 1780427) was still alive at uptime **15:45:51** with
+`--gpu-recent-crash-count=0` and 0 of 29 renderers on
+`--disable-gpu-compositing`. Same PID and zero crashes across the whole window
+is much stronger than a 12-minute sample, and it rules out the deferred-crash
+loop the x11 flag was originally guarding against.
+
 Hardware video decoding is still **unverified** in the NVDEC sense. The
 `featureStatus.video_decode` and empty `videoDecoding` array disagreement noted
 in the 2026-09-07 audit still applies; do not read smooth playback as proof of
 NVDEC.
+
+### GPU health signals
+
+These two process flags are the machine-checkable version of "playback is
+healthy". The 2026-09-07 Canary section already referred to them; the commands
+to read them were never written down, so here they are.
+
+```bash
+# 1. one GPU process, alive, zero recent crashes
+for pid in $(pgrep -f 'type=gpu-process'); do
+  echo "pid $pid uptime=$(ps -o etime= -p $pid | tr -d ' ')"
+  tr '\0' '\n' < /proc/$pid/cmdline \
+    | grep -E '^--ozone-platform=|^--use-angle=|gpu-recent-crash-count'
+done
+echo "GPU process count: $(pgrep -f 'type=gpu-process' | wc -l)"
+```
+
+- `--gpu-recent-crash-count` is the direct signal. **Any non-zero value means the
+  GPU process died and was restarted**; a rising count is the crash loop to
+  look for. Zero after sustained playback is the actual acceptance evidence.
+- `--ozone-platform=wayland` together with `--use-angle=gl` is the intended
+  combination.
+
+```bash
+# 2. no silent GPU fallback in the renderers
+n=0
+for pid in $(pgrep -f 'type=renderer'); do
+  tr '\0' '\n' < /proc/$pid/cmdline 2>/dev/null | grep -q disable-gpu-compositing && n=$((n+1))
+done
+echo "renderers with --disable-gpu-compositing: $n / $(pgrep -f 'type=renderer' | wc -l)"
+
+# 3. no new crash dumps since the session started
+find ~/.config/google-chrome/Crash\ Reports -name '*.dmp' -newermt '-10 min'
+```
+
+`--disable-gpu-compositing` on renderers is the fallback symptom: it appears
+after GPU process failures and means Chrome is compositing on the CPU. Playback
+can still look acceptable while it is present, so it is an **earlier** warning
+than dropped frames.
+
+Compare dumps against the **session start time**, not against "any dumps
+exist" — this profile carries old ones, and an old newest-dump is only evidence
+that nothing *new* crashed.
+
+Chrome spawns and reaps short-lived processes, so `pgrep` can hand back a PID
+that has already exited and `/proc/<pid>/cmdline` then reads
+`No such file or directory`. That is benign churn, not a broken probe; guard the
+reads with `2>/dev/null` or re-run. The same churn makes a single `pgrep |
+head -1` unreliable for finding the browser process — iterate and match on
+`--user-data-dir` instead.
 
 ### Rollback
 
@@ -193,6 +250,19 @@ qdbus6 org.kde.plasmashell /PlasmaShell \
   org.kde.PlasmaShell.evaluateScript \
   'var ps=panels();for(var i=0;i<ps.length;i++){var ws=ps[i].widgets();for(var j=0;j<ws.length;j++){var w=ws[j];if(w.type==="org.kde.plasma.icontasks"){w.currentConfigGroup=["General"];print(JSON.stringify(w.readConfig("launchers",[])));}}}'
 ```
+
+**Enumerate with the top-level `panels()`, not `desktops()[i].panels()`.** In
+Plasma 6.7 `WorkspaceScripting::Containment` has no `panels()` method, so the
+natural-looking form fails outright:
+
+```text
+Error: org.freedesktop.DBus.Error.Failed
+Error: TypeError: Property 'panels' of object WorkspaceScripting::Containment(...) is not a function
+```
+
+Globals available: `panels()`, `desktops()`, and `panelById()`. `desktops()` is
+for desktop-level queries and returns containments, which is the source of the
+mistake above.
 
 For the merge to hold, the entry must read `applications:google-chrome.desktop`.
 

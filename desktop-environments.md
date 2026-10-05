@@ -184,6 +184,66 @@ systemctl --user show-environment | rg XDG_CURRENT_DESKTOP
 systemctl --user status plasmazones.service
 ```
 
+### Where PlasmaZones logs live
+
+PlasmaZones is two components and only one of them is a service. The daemon is
+`plasmazones.service`; the KWin effect is the plugin
+`/usr/lib/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so`, which
+runs **inside the compositor process**. So the two log to different places:
+
+| component | where its log lives |
+| --- | --- |
+| daemon (`plasmazonesd`) | `journalctl --user -u plasmazones.service` |
+| KWin effect | `journalctl --user -t kwin_wayland` |
+| effect log as upstream ships it | `kwin-effect.log` inside a `plasmazones-report` archive |
+
+Reading only the service unit makes PlasmaZones look like it logs nothing at
+all. The effect emits the decisive lines — drag activation, `commitSnap`,
+minimize-float, maximize interception, zone geometry application — and every one
+of them is under `kwin_wayland`.
+
+```bash
+# what the effect said recently
+journalctl --user -t kwin_wayland --since '-15 min' --no-pager \
+  | grep -iE 'plasmazone|Snap:|Autotile:|slotApplyGeometry|Demoting|Floating state'
+
+# the daemon's own view
+journalctl --user -u plasmazones.service --since '-15 min' --no-pager \
+  | grep -iE 'commitSnap|resolveWindowRestore|pre-float|zoneId'
+```
+
+Two verbosity levels exist and they are not interchangeable:
+
+- `qCInfo` lines — `Snap: window minimized (after debounce), floating:`,
+  `Snap: window unminimized, unfloating:`,
+  `Demoting KWin maximize for snap placement`, `Layout OSD:` — **are** present
+  at default logging.
+- `qCDebug` lines — `Snap: minimized unmanaged window, skipping float:`,
+  `slotApplyGeometryRequested: skipping float-restore geometry` — are **not**.
+  Their absence means nothing. Do not read silence as "that code never ran".
+
+Raising the effect's level would mean restarting KWin, which ends the session,
+so treat the `qCInfo` subset as the practical ceiling and confirm behaviour with
+observable state instead — `Control.getFullState`, `LayoutRegistry
+.getScreenStates`, and `qdbus6 org.kde.KWin /KWin
+org.kde.KWin.getWindowInfo <uuid>` for per-window geometry and maximize state.
+
+An empty result from any of these usually means **no activity happened in the
+window**, not that logging is broken — PlasmaZones logs on state changes, not on
+a timer, so a quiet 20 minutes yields zero lines. Widen `--since` or perform the
+gesture first, then re-read. The appId histogram below is the exception that is
+useful even when idle, because it records window identity whenever the effect
+sees a window:
+
+```bash
+journalctl --user -t kwin_wayland --since '-12 min' --no-pager \
+  | grep -oE 'appId: "[^"]*"' | sort | uniq -c
+```
+
+This is also the fastest way to attribute a log line to a specific window, and
+it exposes the raw Wayland `app_id` — that is how Chrome's real `app_id` was
+established for the taskbar-pin work in [chrome-fixes.md](chrome-fixes.md).
+
 ### Drag highlights and placement mode
 
 Verified 2026-09-09 with PlasmaZones 3.4.12. On the Dell ultrawide, virtual
