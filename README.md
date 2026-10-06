@@ -28,6 +28,9 @@ reasoning needed to avoid known integration failures.
 - [DeepSeek Harness](deepseek-harness.md) — the `dsh` agent harness: npm install, provider routes to Ollama Cloud/OpenRouter, profile modes, and the no-TUI finding
 - [tmux](tmux.md) — the layered config and `@theme` selection, pinned-hex status bar, lineless pane dividers marked by fill, the word-separator generator, the persist-autosave systemd timer, and the EL8 portability verdict
 - [Engineering Loadout relocation](engineering-loadout-path.md) — why loadout tools shadowed coreutils/bash/node, relocating EL to `~/.loadout` with `--dest-dir`, the distribution-first PATH policy, and the persistent `dest_dir` config
+- [Alacritty terminal](alacritty-terminal.md) — the daily-driver alacritty config, the palette switcher, the pinned `#000000` background, and the live-reload/IPC-socket traps
+- [Text rendering quality](text-rendering-quality-tools.md) — measuring rendered-text quality from screen grabs; font-file and FreeType-direct tools are diagnosis only
+- [Build caches](build-caches.md) — ccache (makepkg, cmake, clang), sccache for Rust, Go's built-in cache, the mold linker and why not lld, the size budget on `/`, and the traps that look like a broken cache
 
 ## Provenance
 

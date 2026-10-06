@@ -3436,3 +3436,155 @@ key and made Plasma silently drop 4 pins. Do **not** verify it with
 that returns `false` even for the healthy value. Check `length` (7, not ~120)
 and that `v[0]` is a whole launcher URL rather than a single character; then
 write back a native JS array. Exact snippets in chrome-fixes.md.
+
+## 2026-10-06 — alacritty: non-blinking block cursor
+
+Requested: a block cursor that does not blink. Changed `[cursor]` in
+`~/.config/alacritty/alacritty.toml` from
+`style = { shape = "Underline", blinking = "Off" }` to
+`style = { shape = "Block", blinking = "Never" }`.
+
+`"Never"` rather than `"Off"` is deliberate. Alacritty 0.17's man page: `"Off"`
+*disables blinking by default* and still lets an application enable it with
+`DECSCUSR`; `"Never"` means *prevent the cursor from ever blinking*. tmux can emit
+`DECSCUSR`, so `"Off"` would not have guaranteed what was asked for.
+
+Verified against the running instance — which is the whole point of "hot": PID 1950 was
+started at 09:16:05, the edit landed at 09:52:52, and at 09:54:47 that same process
+answered `"cursor":{"style":{"shape":"Block","blinking":"Never"},…}` on its own
+socket (`/run/user/1000/Alacritty-wayland-0-1950.sock`) via `alacritty msg -s …
+get-config`. It could not have read those values at startup, so it re-read the file in
+place; nothing was restarted and no new window was needed.
+
+Not usable as evidence: a throwaway instance's exit status. A broken config also exits
+**0** — `[cursor] shape = "Bogus"` printed only `[WARN] Unused config key: shape`. A
+fresh launch is for reading warnings on stderr, never for a pass/fail signal, and in a
+pipeline `$?` is `head`'s status anyway.
+
+Rollback: set `shape = "Underline"` and `blinking = "Off"` under `[cursor]`.
+`unfocused_hollow = true` is unchanged — the block is a hollow outline while the
+window is unfocused, by design. `thickness` is inert for Block and was kept so the
+Underline rollback restores its previous weight. Details in
+[alacritty-terminal.md](alacritty-terminal.md).
+
+## 2026-10-06 (later) — the block was never applied live; tmux now enforces it
+
+Follow-up to the cursor entry above. The config was right and the screen was still wrong.
+
+Reported as: "the cursor *is* in the grab, it's just such a thin underline". It was: an
+**8x1 one-pixel line** of `#F5E0DC` in the bottom-left pane. The previous analysis had used
+an exact-colour search and concluded "no cursor in the grab" — the underline is one pixel
+tall and antialiased, so it needs a flatten + fuzz + connected-components pass. Two things
+prove the blob is the cursor rather than a glyph: it sits on tmux's cursor cell, and its x
+moved 83 -> 275 px while `#{cursor_x}` moved 2 -> 26, i.e. exactly 8 px per cell.
+
+Two measured facts, both in throwaway windows under the same config:
+
+- **`style.shape` is only a default.** App requests nothing -> filled **10x24** blob (block);
+  app sends `DECSCUSR 4` -> **10x2** (underline). Only blinking is enforceable via config.
+- **A reload does not re-apply the shape.** The window created at 09:16 — when the config
+  still said `Underline` — kept rendering an underline after the 09:52 edit, after
+  `get-config` reported Block, and after an explicit reload probe. A new window with the same
+  file rendered a block.
+
+Fix, at the layer that can enforce it:
+
+    ~/.config/tmux/tmux-user.conf
+    set -s cursor-style block
+
+Verified end to end: at `default` the window renders the 8x1 underline; after
+`tmux source-file ~/.config/tmux/tmux.conf` the option reads `block` and the same cell
+renders an **8x19 filled blob** (area 152 = w*h). No window was restarted.
+
+Rollback: `tmux set -s cursor-style default` and delete the line.
+`~/.config/alacritty/alacritty.toml` is unchanged (Block + Never) and still governs windows
+that are not running tmux. Details in [tmux.md](tmux.md) and
+[alacritty-terminal.md](alacritty-terminal.md).
+
+## 2026-10-06 (later still) — compile-time caches: ccache, sccache, Go verified
+
+Prompted by "I do a ton of compilation on this box". Recon first: `ccache`/`sccache`
+absent, Rust is a rustup user install (`~/.cargo/bin`, no pacman package), Go 1.27 already
+caches natively, clang/llvm/lld 23.1.1 present, `/` at 48G free (80% used), and only five
+small upgrades pending — no kernel or NVIDIA change.
+
+### Installed
+
+    sudo pacman -Syu --noconfirm ccache sccache
+    # undo: sudo pacman -Rns ccache sccache      (hiredis is only there for sccache)
+
+snapper pre **159**, post **160**. Installed ccache 4.14-1, sccache 0.18.0-1.1, hiredis.
+`sccache` comes from `cachyos-extra-v3` (x86-64-v3). The same transaction carried the five
+pending upgrades (cups, libcups, libcupsfilters, libx11, xorgproto). Two benign messages
+appeared: `core-debug.db` 404s from every mirror (CachyOS mirrors do not carry it) and a
+`dotnet-runtime-10.0` local-is-newer-than-extra warning.
+
+### Wired
+
+    /etc/makepkg.conf    BUILDENV=(!distcc color ccache check !sign)
+    backup: /etc/makepkg.conf.bak-ccache-20261006    (diff vs it is that one line)
+
+    ~/.config/ccache/ccache.conf   max_size = 8.0G
+    ~/.config/sccache/config       TOML: [cache.disk] dir=~/.cache/sccache size=4GiB
+    ~/.cargo/config.toml           [build] rustc-wrapper = "sccache"
+
+All three are user-scope files with **no snapper coverage**, so their rollback is deleting
+them; that is also why each carries its reasoning in comments.
+
+### Verified, measured rather than assumed
+
+- makepkg: a trivial PKGBUILD built twice from clean trees — ccache miss, then **hit**.
+  The mechanism is PATH-based (`buildenv_ccache()` prepends `/usr/lib/ccache/bin`), which is
+  why every build system inside a makepkg build is covered for free.
+- cmake: `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache`, miss then **hit** after wiping `build/`.
+- clang++: hits both through ccache directly and through the shipped PATH symlinks.
+- Rust: `--release` rebuild after `cargo clean` — **5 Rust cache hits**, 1.96 s -> 0.33 s.
+- Go: nothing wired; cold 1.867 s -> warm 0.089 s on its own `GOCACHE`.
+
+Two false negatives were hit during verification and are recorded so they are not
+diagnosed again: ccache refuses compile+link invocations ("called for link"), and sccache's
+config is **TOML** — a JSON config fails every start. `$CC` is empty inside a makepkg build
+function. ccache/sccache counters were zeroed after verification; cache contents kept.
+
+Deliberately not enabled: global `/usr/lib/ccache/bin` PATH masking, `CARGO_INCREMENTAL=0`,
+and the mold/lld linkers. Budget rationale, traps and rollback: [build-caches.md](build-caches.md).
+
+## 2026-10-06 (final) — speeder uppers: mold, ninja, hyperfine; cargo relinked
+
+Second half of the same day's compile-speed work; the caches are the entry above.
+
+    sudo pacman -Syu --noconfirm mold ninja hyperfine
+    # undo: sudo pacman -Rns mold ninja hyperfine
+
+snapper pre **161**, post **162**. Installed mold 3.0.0-4.1, ninja 1.13.2-3.1,
+hyperfine 1.21.0-1.1 — all from `cachyos-extra-v3`. Nothing else was pending.
+
+### Wired
+
+    ~/.cargo/config.toml   [target.x86_64-unknown-linux-gnu]
+                           rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+Verified: the flag shows up in the verbose link command and the resulting binary runs.
+Changing `rustflags` invalidates cargo fingerprints, so every Rust project recompiles
+once; sccache absorbs part of that.
+
+### Measured (101-object C++ link, hyperfine, 5 runs each, 24 threads)
+
+    stripped   bfd 39.7 ms | lld 17.4 ms | mold 23.3 ms
+    with -g    bfd 120.0 ms | mold 38.1 ms | lld 40.2 ms      (16 MB binary)
+
+mold was chosen over the faster-on-paper lld because **lld cannot link GCC LTO
+objects**: `g++ -flto=auto -fuse-ld=lld` dies with `ld.lld: error: undefined symbol:
+main`, while mold loads the GCC LTO plugin and links correctly (working, and smaller,
+binary). makepkg has `lto` enabled, so lld would have broken real builds here — the
+number would have been the wrong thing to trust.
+
+`ninja` is a **tie, not a speedup**: a full 100-TU cmake rebuild measured 3.23 s (ninja)
+vs 3.30 s (make) at `-j 24`. It is installed for meson and general tooling
+compatibility, not as a claimed win.
+
+`/etc/makepkg.conf` keeps the default linker so system/AUR packages link as Arch
+expects; opting in is `LDFLAGS+=" -fuse-ld=mold"`. All three linkers were tested against
+the full makepkg LDFLAGS set (including `-Wl,--sort-common`,
+`-Wl,-z,pack-relative-relocs`) and accept it. Traps, budget and rollback in full:
+[build-caches.md](build-caches.md).

@@ -93,6 +93,30 @@ none of it, and with no line drawn there is no fallback cue in such a pane.
 that restoring a visible line starts from the thick one (measured when a line WAS
 visible: `single` = 1px strokes, `heavy` = 2px).
 
+## Cursor: pinned to a steady block
+
+    set -s cursor-style block        # tmux-user.conf
+
+`cursor-style` is a **server** option (`set -s`, read back with `show-options -s`). It is
+the only layer here that can *enforce* a cursor shape: alacritty's `[cursor] style.shape`
+is a default an application may override with `DECSCUSR`, and alacritty never re-reads the
+shape on a config reload — an already-running window keeps whatever shape it was created
+with (measurements in alacritty-terminal.md).
+
+With the option left at `default`, tmux sends nothing for a pane whose app requested no
+style, so a stale underline in the terminal is never corrected. Verified both ways: at
+`default` the active pane's cursor renders as an 8x1 line; after
+`tmux source-file ~/.config/tmux/tmux.conf` the option reads `block` and the same cell
+renders an 8x19 filled blob (area 152 = w*h) in the live window.
+
+Rollback: `tmux set -s cursor-style default`, and delete the line.
+
+Requires tmux >= 3.3 (`cursor-style` was added in 3.3 — tmux's CHANGES, entry under
+"CHANGES FROM 3.2a TO 3.3"). An older tmux reports the line as an unknown option rather
+than ignoring it, which is the same fail-loudly rule the `source-file` lines follow.
+`prompt-cursor-style` / `prompt-cursor-colour` are newer still (3.6) and are left at
+`default`, so the tmux command prompt is unaffected by this pin.
+
 ## Word separators
 
 tmux takes a **literal** character list — no Unicode class, no ranges, no loops.

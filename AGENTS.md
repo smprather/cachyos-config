@@ -59,6 +59,13 @@ Then read the topic file for the area you are touching:
   deliberately WITHOUT `-q`, so a missing file fails loudly — a misnamed theme file once
   meant no theme loaded at all and a reboot reverted the bar. Reload with
   `tmux source-file`, never a server restart.
+- `build-caches.md` for compile-time caching: ccache through makepkg's `BUILDENV`
+  (PATH-based, so it covers cmake/meson/autotools inside a build for free), sccache as
+  cargo's `rustc-wrapper`, and Go's built-in `GOCACHE`. Includes the cache-size budget
+  on `/` and the false negatives that look like "the cache is broken" ("called for
+  link", and sccache's config being TOML rather than JSON). Also the linker: mold is
+  wired for cargo and is the only LTO-safe fast linker here (lld fails on GCC LTO
+  objects), and ninja is installed but measured as a tie with make.
 
 ## Hard Rules
 
