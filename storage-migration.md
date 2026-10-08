@@ -93,6 +93,10 @@ That is a stronger safety net than any file-level restore, and it costs nothing.
 0. **Backup first.** `sda3` is an empty 5.5 TB btrfs — a ready-made target for `btrfs send`
    snapshots of the current root. Also take a manual snapper snapshot
    (`sudo snapper -c root create -d "pre: OS migration"`).
+   **Done 2026-10-07:** snapper **166**, and `scripts/premigration-backup.sh` →
+   `/mnt/premigration/root-2026-10-07/` on `sda3` (135.73 GiB; `@ @root @home @srv`, caches
+   excluded). Re-run it on migration day if much has changed — it is a full stream, not
+   incremental, so it sends another complete copy rather than a delta.
 1. **Prepare the new disk:** GPT with `p1` = 1 GiB vfat (ESP, mounted `/boot`) and `p2` = the
    remainder, btrfs.
 2. **Create the filesystem and subvolume layout** to match the current root:

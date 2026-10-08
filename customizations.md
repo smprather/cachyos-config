@@ -3801,6 +3801,36 @@ removes the Gen4 drive's only argument — on this platform they share the same 
 
 No system state changed: the plan is a document, and the script additions are read-only.
 
+## 2026-10-07 — pre-migration backup taken to sda3, and the plan committed
+
+Pre-flight for the NVMe migration, done now rather than under pressure on the day:
+
+    sudo snapper -c root create -d "pre: OS migration (new drive ordered)"   -> root: 166
+    sudo scripts/premigration-backup.sh                                       (~15 min)
+    git push                                                                  -> e31c9a1
+
+The backup is a `btrfs send` of the live root's subvolumes onto the empty 5.5 TB btrfs on
+`/dev/sda3`: `@ @root @home @srv`, deliberately excluding the disposable caches (`@cache`,
+`@tmp`, `@log`). 135.73 GiB received; verified by listing the received subvolumes, checking the
+target's usage, and confirming 27 entries under `root-2026-10-07/@home/mylesp`. The read-only
+staging snapshots were then deleted and `/premigration-snap` removed, so nothing is pinned on
+the root filesystem — `df /` is back to 42 G free. A `README-restore.md` was written into the
+backup directory explaining that each subvolume must be sent back to its own mount point:
+copying `@` alone would silently leave `/home` and `/root` empty, because those are separate
+subvolumes mounted over empty directories.
+
+Worth knowing, and it changes the shape of migration day: the root filesystem is almost
+entirely *system* data — `@` is ~132 GiB — while `/home` is only ~2.7 GiB. The machine's bulk
+data (2.6 TB of it) lives on `sda`, not in the OS.
+
+Caveats recorded rather than discovered later: it is a **live** backup, so files changing while
+it ran may be captured mid-flight; and it is a full stream, not incremental — re-running it on
+migration day sends another complete ~135 GiB rather than a delta.
+
+Undo: `sudo btrfs subvolume delete` the four received subvolumes under
+`/mnt/premigration/root-2026-10-07/` and remove that directory, then
+`sudo snapper -c root delete 166`.
+
 A hand edit to `/usr/local` is not covered by a pacman transaction, so it was snapshotted
 first: `sudo snapper -c root create -d "pre: document /usr/local/bin shims"` → **root: 165**.
 Undo: `sudo snapper -c root undochange 165..0`, or delete the header blocks by hand.
