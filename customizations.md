@@ -3588,3 +3588,219 @@ expects; opting in is `LDFLAGS+=" -fuse-ld=mold"`. All three linkers were tested
 the full makepkg LDFLAGS set (including `-Wl,--sort-common`,
 `-Wl,-z,pack-relative-relocs`) and accept it. Traps, budget and rollback in full:
 [build-caches.md](build-caches.md).
+
+## 2026-10-06 — tmux: focus follows the mouse (TRIAL)
+
+Asked for as an experiment. The desktop already runs KWin's
+`FocusPolicy=FocusFollowsMouse` (`DelayFocusInterval=300` in kwinrc), so the *window* under
+the pointer was already focused; this extends the same behaviour down to tmux panes.
+
+    tmux set -g focus-follows-mouse on
+    # persisted in ~/.config/tmux/tmux-user.conf (the user override layer, sourced last)
+    # undo: tmux set -g focus-follows-mouse off, and delete the line
+
+Verified that the *file* holds it, not just the live server: `show-options -g` reads `on`
+and `tmux source-file ~/.config/tmux/tmux.conf` succeeds and leaves it `on`. Scope and
+accepted values were checked against tmux's own `options-table.c`, because this box has no
+tmux man page: `OPTIONS_TABLE_FLAG`, scope `SESSION`, default off, described as *"Whether
+moving the mouse into a pane selects it"*. Being a flag it is on/off only — `last` is
+rejected with `bad value: last`. Its prerequisite `mouse on` is already set in
+tmux-global.conf; without mouse events the option cannot do anything at all.
+
+Behavioural verification needs a human, and that is a stated limitation rather than an
+oversight: **there is no pointer injection on this box** (no xdotool/ydotool; KWin scripts
+cannot synthesise input), so no automated check can move the mouse to prove the option
+fires. The trial was started with an active-pane sampler; the loop to watch it live is in
+tmux.md. Main recorded risk: keystrokes go to the pane under the pointer, so a parked mouse
+takes your typing. Details in [tmux.md](tmux.md).
+
+Kept on trial; committed while still a trial, so if it is ever reverted that gets its own
+append-only entry here rather than a rewrite of this one.
+
+## 2026-10-06 — tmux: copy-mode exits at the bottom, and the mouse plugin is gone
+
+Two long-standing annoyances, both root-caused in tmux's source before anything changed.
+
+**1. Wheel to the bottom exited copy-mode; page-down, `j` and down-arrow did not.** Cause:
+tmux's `scroll_exit` is per-copy-mode state set only by `-e` at entry (`window_copy_init`),
+and `-e` was used on the *wheel* path only — `prefix+[` entered without it. It is honoured by
+just three paths (`window-copy.c`: `scroll1`, `pagedown1`, `cmd_scroll_down`). Fix: enter with
+`-e` everywhere.
+
+    bind -T prefix [     copy-mode -e
+    bind -T prefix PPage copy-mode -eu
+    bind -T prefix NPage copy-mode -de
+
+That makes the whole scroll-down family (wheel-down, `C-e`, `J`, `PageDown`, `C-d`) exit at
+the bottom. `cursor-down` is *not* in those paths, so `j`/`Down` — and `G`, which is
+`history-bottom` — got explicit bindings guarded on `scroll_position` **before** the move, so
+a first press at the bottom cannot bounce straight out of copy-mode.
+
+**2. The first wheel-up entered copy-mode without scrolling.** Cause: the plugin's binding
+entered the mode and then relied on `send-keys -M` re-injecting the wheel to scroll, which
+does not scroll the event that enters the mode. Fix: scroll explicitly in the same event.
+
+Because that plugin bound these keys and TPM is sourced *after* `tmux-user.conf`, no override
+could live in the user layer — so the plugin was removed (user approved) and its useful parts
+reimplemented: alternate-screen arrow-key emulation, `-t=` targets, 3 lines per notch.
+
+    ~/.config/tmux/tmux-global.conf   removed @plugin nhdaly/tmux-better-mouse-mode + its 3 @options
+    ~/.config/tmux/tmux-user.conf     the replacement bindings
+
+Verified without a mouse, which is impossible on this box: a second server (`tmux -L probe`)
+drove a copy-mode pane with real keystrokes. Without `-e` PageDown stranded at `oy=0,
+mode=1` — the reported bug reproduced; with it, exit at 20 -> 10. `j` exits on the press
+reaching 0 from 15 -> 10 -> 5, while five presses entered *at* the bottom leave
+`mode=1, oy=0, cy=11` (no bounce). `G` exits. On the live server the registered `WheelUpPane`
+is the new one, the `-N 3` speed is intact, and the reload is clean.
+
+**A wrong turn worth recording: the plugin list is not an option.** Mid-change the block was
+rewritten as `set -gu @plugin` + `set -ag @plugin ...` on the theory that tmux was keeping
+only one plugin. That theory came from `show-options -g @plugin`, which indeed reports only
+the last value — but TPM never reads that option: `plugin_functions.sh` awk-parses the
+config files for `set(-option)? +-g +@plugin` and takes the fourth field. The `-ag` spelling
+matches nothing, so that edit would have dropped BOTH plugins from TPM's list. Reverted to
+one `set -g @plugin` line per plugin (the original form was correct; the mouse plugin line
+stayed removed). The honest check is:
+
+    bash -c '. ~/.tmux/plugins/tpm/scripts/helpers/plugin_functions.sh; tpm_plugins_list_helper'
+
+Undo: re-add the `@plugin` line and its three `@options`, `prefix+I`, then delete the
+replacement bindings. The plugin checkout was left in place and is inert. The wheel path
+itself stays unverified here — no wheel or pointer injection exists — so those two feel
+changes need a human. Details in [tmux.md](tmux.md).
+
+## 2026-10-06 — MarkdownBlaze installed, and the NVIDIA/WebKitGTK workaround it needs
+
+Requested as "install markdownblaze": an offline Markdown viewer (MIT, `bwets/MarkdownBlaze`,
+.NET 10 + Photino + Blazor). There is no AUR package, so the upstream **Arch package** was used
+after verifying its published checksum:
+
+    cd /tmp && gh release download v1.0.23 -R bwets/MarkdownBlaze \
+      -p 'MarkdownBlaze-1.0.23-1-x86_64.pkg.tar.zst' -p 'SHA256SUMS' -D /tmp
+    sudo pacman -U --noconfirm /tmp/MarkdownBlaze-1.0.23-1-x86_64.pkg.tar.zst
+    # undo: sudo pacman -Rns MarkdownBlaze
+
+snapper pre **163**, post **164**. Installed `MarkdownBlaze 1.0.23-1` into `/opt/MarkdownBlaze`
+with `/usr/bin/MarkdownBlaze` and a desktop entry; every declared dependency (gtk3,
+webkit2gtk-4.1, hicolor-icon-theme, desktop-file-utils, shared-mime-info) was already present.
+Two things to know about the artefact: SHA256SUMS lists the package as `./arch/...`, so a flat
+`sha256sum -c` verifies *nothing* — the hash has to be compared explicitly
+(`fc5d38ec…22ba9`, matched before installing); and the package is **unsigned**, so integrity
+comes from that published sum, not from a signature.
+
+**It does not render without help.** A plain launch dies after `Load(markdown://document/)` with
+`Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display`. Measured A/B on the same
+documents: plain launch → **0** `mdSetDocumentTitle` lines in its log (no document ever loaded;
+the process sometimes lingers as a blank window and sometimes dies outright), workaround launch
+→ 1 line, no protocol error, and a correct render confirmed from a screen grab (sidebar tree,
+rendered tables, syntax highlighting).
+
+    /usr/local/bin/MarkdownBlaze      (root:root 0755)
+    exec env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/bin/MarkdownBlaze "$@"
+    # undo: sudo rm /usr/local/bin/MarkdownBlaze
+
+`/usr/local/bin` precedes `/usr/bin` in this session's PATH and the desktop entry uses a bare
+`Exec=MarkdownBlaze %u`, so the wrapper covers menu and MIME-handler launches as well as the CLI.
+Delete it once upstream renders without the workaround. Catalogue row in
+[standard-tools.md](standard-tools.md).
+
+Two method notes worth keeping. First, this is the second time in one session that a `pgrep -f`
+pattern matched my own command line and produced an "it's alive" reading that was false — the
+reliable pattern here is `[o]pt/...`-style bracketing *and* avoiding the literal string elsewhere
+in the command; `pgrep -f '[/]usr/bin/MarkdownBlaze'` is what worked. Second, to capture an
+unfocused window on this box (no xdotool/kdotool), raise it with a KWin script:
+`qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript <file.js>` then
+`…Scripting.start`, with the script setting `workspace.activeWindow` — otherwise `spectacle -a`
+faithfully captures whatever *is* focused, which is how the first grab here came back as alacritty.
+
+## 2026-10-06 (later) — housekeeping: the unowned shims in /usr/local/bin
+
+Follow-up to the MarkdownBlaze install, which raised "who owns a local workaround?". Three
+executables live in `/usr/local/bin` — which precedes `/usr/bin` in PATH, so all three
+shadow or wrap system commands — and **no package owns any of them**; none was documented
+anywhere.
+
+Audit findings:
+
+- `mkinitcpio` (2026-09-24) — **a Limine boot-safety guard**. My earlier description of it
+  as "a hop and nothing else" was wrong: it runs the real binary and then, for `-P`/`-p`/
+  `--allpresets`/`--preset`, warns that this does *not* update Limine boot entries and offers
+  `limine-mkinitcpio` instead. Load-bearing here: the initramfs hook is the local override
+  `/etc/pacman.d/hooks/90-mkinitcpio-install.hook -> limine-mkinitcpio-install`, and the
+  pacman hooks reach `/usr/share/libalpm/scripts/...` by absolute path, so the shim only
+  ever catches a human. Deleting it was on the table before reading it; that would have
+  removed boot protection.
+- `remove-nvidia` (2026-08-09) — **misnamed**: it clears VM *guest* packages
+  (virtualbox-guest-utils{,-nox}, open-vm-tools, qemu-guest-agent, vmware autostart) when the
+  machine is not itself a VM. It touches no NVIDIA package. It is a no-op here
+  (`systemd-detect-virt` = none; none of those packages installed), no other copy exists on
+  disk, and nothing references it by name. Left in place: the intent behind the name is
+  recorded nowhere, so renaming or deleting it is the user's call.
+- `MarkdownBlaze` (today) — needs its wrapper until upstream renders without the DMA-BUF
+  workaround, and now carries an expiry note saying how to re-test.
+
+Action taken: each file now carries a header comment stating what it does, why it exists and
+its undo, and all three are listed in [system-inventory.md](system-inventory.md). The
+inventory is the point — an unowned shim is invisible to pacman and therefore has no
+lifecycle. **No behaviour was changed:** comparing all non-comment lines against the
+originals gives zero differences for all three, and each works under a direct `execve`
+(a shell would have silently fallen back to `/bin/sh` on a bad shebang).
+
+Trap worth keeping, the same shape as the "`return config` must stay last" rule for wezterm:
+inserting the comment block **above** the shebang displaced it in the two pre-existing shims,
+and the code-line comparison above could not see it, because a shebang is itself a `#` line.
+Only `head -1` — and then a direct `execve`, once that showed the shebang was no longer first
+— exposed it. Insert *after* the first line, then read the insertion point back.
+
+## 2026-10-06 (final) — a full hardware check, and two findings
+
+Hardware facts were scattered across ad-hoc commands — answering "what memory do I have?"
+meant re-querying the machine — so the survey is now a script plus its saved output:
+
+    scripts/hardware-check.sh                       read-only, 13 sections, ~3 s
+    hardware-check.md                              redacted copy of the 2026-10-06 run
+    ~/Documents/hardware-check-full-2026-10-06.md   unredacted (serials, MACs, IPs, SSIDs)
+
+The repo copy is redacted by the `sed` documented at the top of the script, because this repo
+is published; nothing in it identifies the machine. **No system state changed.** The hardware
+summary now lives in [system-inventory.md](system-inventory.md).
+
+Two things the check surfaced that were recorded nowhere:
+
+- **`/dev/md127` is a degraded RAID-1** — `[2/1] [U_]`, one member missing, active
+  auto-read-only and not mounted, so no live data depends on it. It sits on `sdb3` (3 TB
+  Hitachi), whose other partitions carry legacy `linux_raid_member` 0.90 metadata.
+- The **root** NVMe is the old, well-used one: `INTEL SSDPEKKW256G7`, 38,280 power-on hours,
+  33.5 TB written, 13% rated wear — while the nearly-new 980 PRO (1,981 h, 3%) holds the Windows
+  install and an unused 443 GB btrfs partition.
+
+Three gaps in the script were found by running it and fixed in place: it queried no md arrays;
+its helpers did not echo the command behind each block, so the saved output did not explain
+itself did not explain itself; and a fully-italic footer line tripped markdown lint (MD036).
+
+### Disk choice and migration plan (same day, later)
+
+Follow-ups from the storage investigation, written down rather than left in conversation:
+
+    storage-migration.md         plan for moving this OS to a new NVMe (not executed)
+    scripts/hardware-check.sh    now also captures PCIe topology and the /boot listing
+
+The findings that drove the plan, all machine-verified: this board's best M.2 slot advertises
+**16 GT/s (PCIe 4.0)** — the CPU slot, where the 600p currently sits — while the 980 PRO is
+behind an **8 GT/s** root port and reports `(downgraded)`. A Gen5 drive would therefore train
+down to 4.0 x4 and sit at the same ~7 GB/s ceiling as a 980 PRO, so the new disk goes in the
+CPU slot for Linux, **Windows stays on the 980 PRO with no clone**, and the 600p retires.
+That is what makes the plan compatible with "no Windows co-located with another OS" — and it
+also removes the "where do I put 389 GB of Windows" problem entirely. The one non-obvious
+cost: `/boot` *is* the 600p's ESP (`Boot0002` → `HD(1, GPT, 35e30959…)`), so the new disk needs
+its own ESP, Limine install and UEFI entry before the old disk can be removed.
+
+Buying decision: the 9100 PRO was **$40 cheaper** than a 990 PRO of the same capacity, which
+removes the Gen4 drive's only argument — on this platform they share the same link ceiling.
+
+No system state changed: the plan is a document, and the script additions are read-only.
+
+A hand edit to `/usr/local` is not covered by a pacman transaction, so it was snapshotted
+first: `sudo snapper -c root create -d "pre: document /usr/local/bin shims"` → **root: 165**.
+Undo: `sudo snapper -c root undochange 165..0`, or delete the header blocks by hand.

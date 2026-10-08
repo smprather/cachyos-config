@@ -31,6 +31,9 @@ reasoning needed to avoid known integration failures.
 - [Alacritty terminal](alacritty-terminal.md) — the daily-driver alacritty config, the palette switcher, the pinned `#000000` background, and the live-reload/IPC-socket traps
 - [Text rendering quality](text-rendering-quality-tools.md) — measuring rendered-text quality from screen grabs; font-file and FreeType-direct tools are diagnosis only
 - [Build caches](build-caches.md) — ccache (makepkg, cmake, clang), sccache for Rust, Go's built-in cache, the mold linker and why not lld, the size budget on `/`, and the traps that look like a broken cache
+- [Standard tools](standard-tools.md) — the living catalogue of everyday desktop tools; anything an agent installs gets a row there
+- [Hardware check](hardware-check.md) — the full read-only hardware survey (board/BIOS, CPU, memory kit, storage map including a degraded `md127` mirror, displays, sensors); regenerate with `scripts/hardware-check.sh`
+- [Storage migration](storage-migration.md) — plan only: moving this OS to a new NVMe, with the PCIe slot facts, the btrfs send/receive route, the Limine ESP move, acceptance tests and rollback
 
 ## Provenance
 
