@@ -4021,8 +4021,8 @@ both the copy and the verification, so the two cannot diverge:
     # list first (relative to the rsync source root), then copy from that exact list
     sudo bash /tmp/rescue-find.sh > /tmp/rescue-home.list          # 23 069 files
     sudo rsync -a --chown=mylesp:mylesp --files-from=/tmp/rescue-home.list \
-         /mnt/nvme1n1p5-inspect/@home/epramyl/ \
-         ~/Documents/rescued-nvme1n1p5-2026-10-11/home-epramyl/
+         /mnt/nvme1n1p5-inspect/@home/<user>/ \
+         ~/Documents/rescued-nvme1n1p5-2026-10-11/home-<user>/
     # then sha256sum both sides from the SAME list and diff -> 0 differences, 23 069 entries each
 
 The list excluded `.cache`, the duplicate-finder cache, two Linux ISOs and vendored tool sources;
