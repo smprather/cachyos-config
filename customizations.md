@@ -4007,3 +4007,47 @@ safety net does not survive a fresh install, because those entries name subvolum
 btrfs.
 
 Not done: any change to the machine. This entry is an artifact and two documentation fixes.
+
+## 2026-10-11 — the Windows-disk btrfs: rescued, then destroyed
+
+`nvme1n1p5` (443 GiB btrfs on the 980 PRO) held an abandoned CachyOS install for a different
+user, identified earlier the same day. The owner confirmed it had been abandoned deliberately —
+Windows had made it unbootable — and asked for the personal documents to be rescued and the
+filesystem destroyed. Nothing outside p5 was touched.
+
+**Rescue, verified before anything was destroyed.** The file list was built **once** and used for
+both the copy and the verification, so the two cannot diverge:
+
+    # list first (relative to the rsync source root), then copy from that exact list
+    sudo bash /tmp/rescue-find.sh > /tmp/rescue-home.list          # 23 069 files
+    sudo rsync -a --chown=mylesp:mylesp --files-from=/tmp/rescue-home.list \
+         /mnt/nvme1n1p5-inspect/@home/epramyl/ \
+         ~/Documents/rescued-nvme1n1p5-2026-10-11/home-epramyl/
+    # then sha256sum both sides from the SAME list and diff -> 0 differences, 23 069 entries each
+
+The list excluded `.cache`, the duplicate-finder cache, two Linux ISOs and vendored tool sources;
+root's duplicate-scan outputs were copied separately. Result:
+`~/Documents/rescued-nvme1n1p5-2026-10-11/` — **23 111 files, 2.7 GiB**. The bulk of it is 2.2 GiB
+of `.config` app caches; the genuinely personal part is small. **This is now the only copy**, so
+nothing in it should be pruned without deciding that deliberately.
+
+**Destruction.** The gate checked the **PARTUUID** (`53194683-…`) rather than a device node,
+refused while the filesystem was mounted — and it did refuse, correctly, on the first attempt
+because the inspection mount was still up — and confirmed nothing held it open:
+
+    sudo wipefs -a /dev/nvme1n1p5        # erased the 8-byte btrfs signature at 0x10040
+    sudo blkdiscard -v /dev/nvme1n1p5   # discarded 475 794 185 728 bytes (443 GiB)
+
+Verify: `blkid -s TYPE` and `lsblk -o FSTYPE` are both empty, the `_BHRfS_M` magic is gone, and
+the first 16 bytes read as zeros. `blkid` still reports a **PARTUUID** — that is the partition
+table, which was deliberately left alone, which is also why the Windows partitions (p1–p4,
+PARTUUIDs unchanged) were never at risk.
+
+**There is no undo.** No snapper snapshot covers another filesystem, and the `sda3` premigration
+backup never included p5. The undo is the rescue copy above, plus the fact that Windows can now
+claim the space.
+
+**Consequence for the migration:** 443 GiB on the Windows disk is now free and empty. It is *not*
+adjacent to Windows C:, so it cannot be folded back into it without moving the recovery, ESP and
+MSR partitions between them — and p3 is the Windows ESP. The realistic options are an NTFS data
+volume or Linux scratch; the format decision is still open.

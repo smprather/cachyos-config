@@ -164,6 +164,19 @@ drives move; PARTUUIDs do not.
    Linux install vanish from the menu, and it is the concrete reason the two systems keep
    separate ESPs on this machine. It also means reviving it would be a boot-entry exercise rather
    than a data-recovery one.
+
+   **Destroyed 2026-10-11**, after a verified rescue of the personal documents — a copy now exists
+   on `/` at `~/Documents/rescued-nvme1n1p5-2026-10-11/` (23 111 files, 2.7 GiB, every file
+   checksum-verified against the source *before* anything was written). The filesystem signature
+   was removed with `wipefs -a` and the whole 443 GiB discarded with `blkdiscard`, so the btrfs
+   magic is gone and the blocks are unmapped at the drive. `p5` is now a **RAW, empty, 443 GiB
+   partition** — no filesystem, no signature — and the partition table was deliberately not
+   touched, so the Windows partitions were never at risk.
+
+   What to put on it is an open decision: NTFS for a Windows data volume, or btrfs for Linux
+   scratch. Note it is **not adjacent to the Windows C: partition** — p1 through p5 are separated
+   by the recovery, ESP and MSR partitions — so the space cannot simply be folded back into C:
+   without moving those three, and p3 is the Windows ESP.
 3. **The "rollback is a boot-menu entry" safety net does not survive a fresh install.** It
    rests on `limine-snapper-sync` generating one entry per snapper snapshot (hence the 94 KiB
    `limine.conf`), and those entries name subvolumes of the *current* btrfs
