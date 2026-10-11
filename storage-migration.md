@@ -37,6 +37,15 @@ QD1 and 1.2 GB/s sequential, against 253 MB/s and 2.2 GB/s for the 980 PRO — t
   two systems remain on separate disks with separate ESPs — the arrangement this machine
   insists on, after Windows and rEFInd once shared an ESP (their fossils are still in the
   Windows ESP, `nvme1n1p3`).
+
+  **2026-10-11: Windows is effectively abandoned on this machine** (the owner's words: "good
+  riddance"), so nothing below needs the space kept for it. The layout rules still hold — separate
+  ESPs are worth having regardless — but the *reason* shifts from "Windows must keep booting" to
+  "do not let one system's bootloader update clobber the other's boot path". Practical effect: the
+  ~488 GiB of `p1`+`p2`+`p4` becomes reclaimable **at leisure**, and nothing has been deleted. Note
+  the Windows partitions are not even readable from this Linux — `ntfsresize`/`ntfs-3g` are not
+  installed and the kernel has no `ntfs3` — so anything wanted from `C:` needs either a Windows
+  boot or `ntfs-3g` installed first.
 - **Intel 600p → retire** (38,280 h, 33.5 TB written, 13 % wear). Leave it installed and
   bootable until the new disk has booted at least once; afterwards it can serve as an
   internal `btrfs send` backup target. **Note: `/boot` currently *is* the 600p's ESP**
@@ -208,6 +217,63 @@ The redaction rule set is the one documented in `scripts/hardware-check.sh`, and
 self-tests it against synthetic input on every run, exiting non-zero if a rule fails. That
 self-test is not decoration — it is what found the redaction leak recorded in the 2026-10-11 entry
 of `customizations.md`.
+
+## `/scratch` on the 980 PRO — what the 443 GiB becomes (decided 2026-10-11)
+
+`nvme1n1p5` (443 GiB, emptied earlier the same day) is **not** going back to Windows. The decision:
+Windows is effectively abandoned here, so the space becomes **Linux scratch for job runs**
+(OpenROAD-class flows were the motivating case). **No partition was moved and none needs to be** —
+this is `mkfs` plus one fstab line, which is the entire reason it beat growing `C:`.
+
+Why not grow `C:`, recorded so it is not re-opened: `p1` is followed *immediately* by `p2`
+(recovery), with only 2 048 sectors free between `p2` and `p3`, and the 443 GiB sits at the **tail**
+of the disk behind `p2`/`p3`/`p4`. Extend Volume therefore needs three partitions moved **offline**,
+and the risky one is the **ESP** — `Boot0000` resolves Windows as `HD(3,GPT,222670bc-…)`. This Linux
+could not have done it anyway: no `ntfsresize`, no `ntfs-3g`, no kernel `ntfs3`.
+
+### Why scratch is worth having here specifically
+
+- **`/tmp` is tmpfs** on this machine, so a large flow writing intermediates there is spending
+  **RAM**. That is the concrete problem this fixes.
+- **Snapper's root config is `SUBVOLUME="/"`**, so job output under `/` lands in snapshot scope. A
+  separate volume is invisible to snapper *and* to the `@ @root @home @srv` backup — which is
+  correct for disposable data.
+- **A separate partition bounds a runaway job** at 443 GiB, rather than filling the pool the OS
+  lives in.
+- `sda3` is 5.5 TB of btrfs and 97 % empty, but it is a **spinning** disk: good for capacity, poor
+  for this I/O. Scratch wants NVMe. (The 980 PRO is the *slower* of the two NVMe options — chipset
+  slot, 3.0 x4, `LnkSta: 8GT/s (downgraded)` — which is the right way round: fast slot for the OS.)
+
+### Format and mount — migration day, not before
+
+Deliberately **not** the recipe the rest of `/etc/fstab` uses. `compress=zstd:1` is wrong for
+write-churn scratch: compression and CoW on constantly-rewritten temp files cost CPU and fragment
+for no benefit.
+
+```bash
+# either — xfs is the simpler fit for pure churn; btrfs keeps one filesystem family
+mkfs.xfs -L scratch /dev/nvme1n1p5
+# mkfs.btrfs -L scratch /dev/nvme1n1p5      # then, after mounting: chattr +C /scratch
+```
+
+```fstab
+# UUID from `blkid /dev/nvme1n1p5`; nofail is NOT optional (see below)
+UUID=<p5-uuid> /scratch xfs defaults,noatime,nofail,x-systemd.device-timeout=5 0 0
+```
+
+**`nofail` is mandatory**, not tidiness: the choreography above **removes the 980 PRO from the
+machine**, and every existing fstab entry on this system is mandatory. A mandatory entry for an
+absent disk is how you get an emergency shell instead of a boot. Either add this line *after* the
+hardware is settled, or write it with `nofail` from the start.
+
+Permissions, or the jobs cannot write: `chmod 1777 /scratch` (as `/tmp`), or a setgid group. Then
+point runs at it — `TMPDIR=/scratch/$USER/…` plus the flow's own output/scratch setting. If a flow
+insists on writing beside the design, **bind-mount** rather than symlink into the build tree.
+Anything containerised needs the path bind-mounted in *and* permissions matching the container
+UID — the usual "job cannot write to scratch" failure.
+
+**Standing rule: nothing irreplaceable in `/scratch`.** It sits on the disk that already ate one
+Linux install, so it is expendable by design. Decline if Windows ever offers to format it.
 
 ## Steps
 
