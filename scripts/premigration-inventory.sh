@@ -36,8 +36,8 @@
 # `ip addr` output has it -- while the MAC alternatives share one space and work. The bare-address
 # rules below cover `ip -br addr` output, which has no `inet` literal at all.
 #
-# That bug is live in the repo, not theoretical: hardware-check.md (PUBLIC) still carries eno1's
-# real MAC and `192.168.0.15/24`, from exactly such a section. Found by this script's own
+# That bug is live in the repo, not theoretical: hardware-check.md (PUBLIC) still carried eno1's
+# real MAC and the machine's actual LAN address, from exactly such a section. Found by this script's own
 # self-test on 2026-10-11; see customizations.md.
 #
 # Disk identity for the boot-path steps in storage-migration.md is deliberately NOT taken from
@@ -238,7 +238,7 @@ mkdir -p "$OUT_DIR" || exit 1
 FULL="$OUT_DIR/$BASE.txt.gz"
 REDACTED="$OUT_DIR/$BASE.redacted.txt.gz"
 
-REDACT_SED='s/^(.*(Serial Number|serial)[^:]*:).*/\1 [redacted]/I; s/(link\/ether|permaddr) [0-9a-fA-F:]+/\1 [redacted]/g; s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/[redacted]/g; s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g; s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g; s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g; s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig'
+REDACT_SED='s/^(.*(Serial Number|serial)[^:]*:).*/\1 [redacted]/I; s/(link\/ether|permaddr) [0-9a-fA-F:]+/\1 [redacted]/g; s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/[redacted]/g; s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g; s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g; s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g; s/(Machine|Boot) ID[=: ]+[0-9a-fA-F-]+/\1 ID [redacted]/Ig; s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig'
 
 gzip -9 -c "$TMP" > "$FULL"
 sed -E "$REDACT_SED" "$TMP" | gzip -9 -c > "$REDACTED"
@@ -255,13 +255,14 @@ UUID=deadbeef-0000-1111-2222-333333333333
 link/ether aa:bb:cc:dd:ee:ff
 inet 192.0.2.55/24
 SSID: TestNet
-198.51.100.7/24 fe80::5cb:5188:ec9f:a776/64
-Controller BC:C7:46:9A:E8:89 (public)
-lo UNKNOWN 00:1b:44:11:3a:b7 <UP>'
+198.51.100.7/24 2001:db8::5678/64
+Controller 02:00:5e:12:34:56 (public)
+lo UNKNOWN 00:1b:44:11:3a:b7 <UP>
+Machine ID: 0123456789abcdef0123456789abcdef'
 selftest_out="$(printf '%s\n' "$selftest_in" | sed -E "$REDACT_SED")"
 
 printf '\nredaction rule self-test (synthetic input; every line must read "redacted"):\n'
-for tok in TESTSERIAL123 deadbeef-0000-1111-2222-333333333333 aa:bb:cc:dd:ee:ff 192.0.2.55 TestNet 198.51.100.7 fe80::5cb:5188:ec9f:a776 BC:C7:46:9A:E8:89 00:1b:44:11:3a:b7; do
+for tok in TESTSERIAL123 deadbeef-0000-1111-2222-333333333333 aa:bb:cc:dd:ee:ff 192.0.2.55 TestNet 198.51.100.7 2001:db8::5678 02:00:5e:12:34:56 00:1b:44:11:3a:b7 0123456789abcdef0123456789abcdef; do
     if printf '%s' "$selftest_out" | grep -qF -- "$tok"; then
         printf '  FAIL      %s survived the sed\n' "$tok"
         rc=1

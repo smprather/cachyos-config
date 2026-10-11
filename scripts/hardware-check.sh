@@ -12,6 +12,7 @@
 #           s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g; \
 #           s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g; \
 #           s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g; \
+#           s/(Machine|Boot) ID[=: ]+[0-9a-fA-F-]+/\1 ID [redacted]/Ig; \
 #           s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig' full.md > public.md
 #
 # Do NOT reinstate the older form of this sed. It did not redact IP addresses at all: its
@@ -23,7 +24,9 @@
 # Without it, `ip -br link` and `bluetoothctl show` output stays untouched.
 #
 # hardware-check.md in this repo is the redacted copy of the 2026-10-06 run; its network and
-# Bluetooth blocks were hand-redacted on 2026-10-11 because of the above. See the note in it.
+# Bluetooth blocks were hand-redacted on 2026-10-11 because of the above, as was the machine-id
+# (a stable identifier of this machine, and the name Limine gives its kernel-staging directory).
+# See the note in it.
 #
 # shellcheck disable=SC2016  # Every single-quoted string below is a script handed to `sh -c`
 #   on purpose, so its $vars must expand *inside*. File-wide, so it must precede all code.

@@ -18,6 +18,11 @@ Network and Bluetooth blocks are hand-redacted rather than purely machine-genera
 command echo in the `iw dev` block is visibly mangled because the `SSID` rule fired on the
 command text itself instead of on output.
 
+The machine-id is redacted **by hand** too, and for a specific reason: it is a stable identifier of
+this machine, and Limine names its kernel-staging directory after it, so leaving it would have
+re-identified the redacted `/boot` listing above. The documented sed now carries a
+`Machine ID` / `Boot ID` rule, so a regeneration redacts it automatically.
+
 Generated: 2026-10-07T22:15:48-05:00 · machine cachyos-x8664 · kernel 7.2.9-1-cachyos · CachyOS on a Gigabyte B550 AORUS ELITE AX V2
 
 ## System
@@ -27,7 +32,7 @@ $ hostnamectl
  Static hostname: cachyos-x8664
        Icon name: computer-desktop
          Chassis: desktop 🖥️
-      Machine ID: c918fefaab2e4235b68284d69c2545b1
+      Machine ID: [redacted]
          Boot ID: e3c262feaefd4182ab2da0a89963984d
     Product UUID [redacted]
 Operating System: CachyOS
@@ -152,7 +157,7 @@ total 2152
 drwx------ 6 root root  16384 Dec 31  1969 .
 dr-xr-xr-x 1 root root    150 Sep 23 15:21 ..
 -rwx------ 1 root root 307200 Sep 17 09:27 amd-ucode.img
-drwx------ 5 root root   4096 Aug 29 22:28 c918fefaab2e4235b68284d69c2545b1
+drwx------ 5 root root   4096 Aug 29 22:28 [redacted]
 drwx------ 4 root root   4096 Aug 29 17:22 EFI
 -rwx------ 1 root root   4096 Dec 31  1979 FSCK0000.REC
 -rwx------ 1 root root   4096 Dec 31  1979 FSCK0001.REC

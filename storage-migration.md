@@ -325,8 +325,9 @@ work than it sounds, and nothing here is destructive until step 5.
   **384** `FSCK0000.REC`–`FSCK0383.REC` fragments with epoch/1979 timestamps — lost-and-found
   remains from a past `fsck` (trivial in size, 1.5 MiB total) — beside `amd-ucode.img`,
   `EFI/limine/` and `limine.conf{,.old}`. The directory that was flagged here as unexplained
-  is now identified: `/boot/c918fefaab2e4235b68284d69c2545b1/` is **Limine's own kernel staging
-  area**, holding per-kernel `vmlinuz` + `initramfs` plus `limine_history/snapshots.json`. It is
+  is now identified: `/boot/<machine-id>/` — Limine names that directory after
+  `/etc/machine-id` — is **Limine's own kernel staging area**, holding per-kernel `vmlinuz` +
+  `initramfs` plus `limine_history/snapshots.json`. It is
   1.9 GiB — essentially all of the ESP's usage — and is written by `limine-mkinitcpio-hook`
   (`limine-mkinitcpio-install`). It is **load-bearing, not debris**: do not "clean" it, and
   expect a fresh ESP to be rebuilt with the same shape rather than copied. Re-run
