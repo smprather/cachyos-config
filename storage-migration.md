@@ -127,12 +127,43 @@ drives move; PARTUUIDs do not.
    Limine's kernel staging area (see the resolved trap above). Neither is a reason to distrust
    the old ESP as a fallback; the directory is load-bearing.
 2. **There is a third btrfs filesystem, on the Windows disk.** `nvme1n1p5` (443 GiB, PARTUUID
-   `53194683-33b7-4512-b89c-94501ec22746`, UUID `90c6cfd1-8c68-447c-8597-552f126d16ae`, ~96 GiB
+   `53194683-33b7-4512-b89c-94501ec22746`, UUID `90c6cfd1-8c68-447c-8597-552f126d16ae`, 97 GiB
    used) is btrfs and is **not referenced by `/etc/fstab`, by any mount unit, or by any snapper
-   config** — it is unmounted and it is *not* in the `sda3` premigration backup, which captured
-   only the 600p's `@ @root @home @srv`. Decide what it is before pulling that drive: if it
-   holds anything wanted, it needs its own copy, because pulling the 980 PRO takes it offline
-   for the whole migration.
+   config** — it is unmounted, and it is *not* in the `sda3` premigration backup, which captured
+   only the 600p's `@ @root @home @srv`. Pulling the 980 PRO takes it offline for the whole
+   migration, so anything wanted on it has to be copied first.
+
+   Identified 2026-10-11 by mounting it **read-only** (subvolid=5 exposes the top level, so the
+   subvolume layout is visible):
+
+   ```bash
+   sudo mkdir -p /mnt/nvme1n1p5-inspect
+   sudo mount -o ro,subvolid=5 /dev/nvme1n1p5 /mnt/nvme1n1p5-inspect
+   # ... inspect ...
+   sudo umount /mnt/nvme1n1p5-inspect
+   ```
+
+   It is an **abandoned CachyOS install**: the same `@ @home @root @srv @cache @tmp @log` layout
+   as this machine, `@/etc/os-release` = CachyOS, filesystem created 2024-09-30, last written
+   around 2025-04-28, and holding **a different machine-id** — so it is not this machine's
+   current install. 75 GiB is the OS, 25 GiB is one user's home, 6 GiB is cache, 45 MiB logs. Of
+   that home, 16.3 GiB of the 17 GiB `Downloads` is two Linux ISOs plus duplicate-finder
+   tooling, i.e. disposable.
+
+   **But the same directory holds a small number of personal documents belonging to a named
+   individual** (employment and identity paperwork). So: **do not reformat, resize or repurpose
+   this partition until those have been reviewed and deliberately dealt with.** Nothing on it is
+   needed to run this machine; once it has been triaged, p5 is 443 GiB of reclaimable space on
+   the Windows disk.
+
+   **Why it was abandoned** (the machine's owner, 2026-10-11): Windows made the install
+   unreachable and retrieving it was not worth the effort. Note precisely what that does and does
+   not mean — the partition and all 97 GiB are **intact**, mounting cleanly read-only with no
+   errors, so what was lost was the *boot path*, not the data. This is the same hazard the Traps
+   section warns about, seen from the other side: a Windows-side change is exactly what makes a
+   Linux install vanish from the menu, and it is the concrete reason the two systems keep
+   separate ESPs on this machine. It also means reviving it would be a boot-entry exercise rather
+   than a data-recovery one.
 3. **The "rollback is a boot-menu entry" safety net does not survive a fresh install.** It
    rests on `limine-snapper-sync` generating one entry per snapper snapshot (hence the 94 KiB
    `limine.conf`), and those entries name subvolumes of the *current* btrfs
