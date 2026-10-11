@@ -7,13 +7,27 @@
 # IP addresses, SSIDs). It is fine locally; redact before publishing anywhere:
 #
 #   sed -E 's/^(.*(Serial Number|serial)[^:]*:).*/\1 [redacted]/I; \
-#           s/(link\/ether|permaddr|inet6? ) [0-9a-fA-F:.]+/\1 [redacted]/g; \
+#           s/(link\/ether|permaddr) [0-9a-fA-F:]+/\1 [redacted]/g; \
+#           s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/[redacted]/g; \
+#           s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g; \
+#           s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g; \
+#           s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g; \
 #           s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig' full.md > public.md
 #
-# hardware-check.md in this repo is the redacted copy of the 2026-10-06 run.
+# Do NOT reinstate the older form of this sed. It did not redact IP addresses at all: its
+# `inet6? ` alternative carried its own trailing space, so that branch demanded two spaces
+# between `inet` and the address and never matched real output. Neither branch could match
+# `ip -br` or `bluetoothctl` shapes either, which carry no `inet` / `link/ether` anchor. That
+# leaked six IPs, four link-layer MACs and a Bluetooth MAC into the published copy of this file.
+# Hence the context-free MAC rule above: six colon-separated hex pairs, redacted anywhere.
+# Without it, `ip -br link` and `bluetoothctl show` output stays untouched.
+#
+# hardware-check.md in this repo is the redacted copy of the 2026-10-06 run; its network and
+# Bluetooth blocks were hand-redacted on 2026-10-11 because of the above. See the note in it.
+#
+# shellcheck disable=SC2016  # Every single-quoted string below is a script handed to `sh -c`
+#   on purpose, so its $vars must expand *inside*. File-wide, so it must precede all code.
 set -u
-# shellcheck disable=SC2016  # the single-quoted strings below are scripts handed to
-#                             # `sh -c` on purpose, so their $vars must expand *inside*.
 sec() { printf '\n## %s\n\n' "$1"; }
 run() { printf '```text\n$ %s\n' "$*"; "$@" 2>&1; printf '```\n'; }
 runsh() { printf '```text\n$ %s\n' "$1"; sh -c "$1" 2>&1; printf '```\n'; }

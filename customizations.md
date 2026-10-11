@@ -3834,3 +3834,176 @@ Undo: `sudo btrfs subvolume delete` the four received subvolumes under
 A hand edit to `/usr/local` is not covered by a pacman transaction, so it was snapshotted
 first: `sudo snapper -c root create -d "pre: document /usr/local/bin shims"` → **root: 165**.
 Undo: `sudo snapper -c root undochange 165..0`, or delete the header blocks by hand.
+
+## 2026-10-10 — plasmashell wedged: the 40-second logout, and five diagnostics hardened
+
+The panel froze and logging out then hung for about a minute. One cause, two symptoms:
+`plasmashell` (pid 1290) had wedged in userspace, so it answered neither input nor SIGTERM —
+its SIGTERM handling runs through the Qt event loop (`KSignalHandler`), which a blocked main
+thread never reaches — and systemd waited its shipped `TimeoutSec=40sec` before SIGKILLing
+it at 19:05:47. The session ended at 19:05:48 and the desktop was back at 19:06:03. Full
+timeline, mechanism and ruled-out list: `plasmashell-wedge.md` (new).
+
+That SIGKILL is also why the trigger is unknown permanently: a killed process leaves no core,
+no backtrace and no `/proc` state, and plasmashell logged nothing itself. So nothing was
+"fixed" here — the whole point of this entry is the diagnostics, so that the next one is
+recoverable.
+
+Snapshotted first, because hand edits under `/etc` and `/usr` are not covered by a pacman
+transaction:
+
+    sudo snapper -c root create -d "pre: plasmashell-wedge hardening + journald retention"   -> root: 175
+
+**1. Journal retention raised — the cap that hid the evidence.** `cachyos-settings` ships
+`SystemMaxUse=50M` in `/usr/lib/systemd/journald.conf.d/00-journal-size.conf`, which retained
+barely one boot and had already rotated away the first 7 h of even that one (boot 08:23,
+first surviving entry 15:24). That `/usr` file is package-owned, so the override goes in
+`/etc`:
+
+    /etc/systemd/journald.conf.d/50-retention.conf      [Journal] SystemMaxUse=2G
+    sudo systemctl reload systemd-journald
+
+Verify: `systemd-analyze cat-config systemd/journald.conf | grep SystemMaxUse` shows `2G`
+last, i.e. winning over the 50M; `journalctl --list-boots` accumulates more than one boot
+from now on. Undo: `sudo rm /etc/systemd/journald.conf.d/50-retention.conf && sudo systemctl
+reload systemd-journald`.
+
+**2. Panel-wedge watchdog installed.** Source is tracked in-repo in `plasmashell-watch/`
+(script, unit, timer, README); the live copies are:
+
+    sudo install -Dm0755 plasmashell-watch/plasmashell-wedge-watch.sh /usr/local/bin/plasmashell-wedge-watch.sh
+    sudo install -Dm0644 plasmashell-watch/plasmashell-wedge-watch.service /etc/systemd/system/
+    sudo install -Dm0644 plasmashell-watch/plasmashell-wedge-watch.timer   /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now plasmashell-wedge-watch.timer
+
+It probes `org.kde.plasmashell` liveness over D-Bus every 10 s and, after 3 consecutive
+failures, captures a gdb backtrace plus a zstd-compressed core under
+`/var/log/plasmashell-wedge/`. It is passive: it does not signal plasmashell, and the
+`AUTO_KILL` fast-kill path is a deliberate opt-in file rather than a default.
+
+Two constraints were found by testing rather than assumed. The probe must run **as the
+session owner**, because a user session bus rejects a cross-UID connection from root
+(`Failed to connect to system scope bus via local transport: Broken pipe` — dbus-daemon's
+EXTERNAL auth requires the peer UID to match the bus owner). The capture must run as
+**root**, because `ptrace_scope=1` refuses a same-user non-descendant attach. So the script
+uses `setpriv --reuid/--regid --init-groups` for the probe and root `gdb` for the capture.
+`runuser` was used first and rejected: it opens a PAM session per run, two journal lines
+each, ~17k a day.
+
+Both paths were exercised: a healthy panel produces no output and leaves no files (over
+repeated runs — this caught a real false positive on the first attempt, when the probe still
+ran as root), and a forced probe failure against a sacrificial process produced all three
+artifacts including the core.
+
+Verify: `systemctl list-timers plasmashell-wedge-watch.timer` shows NEXT within 10 s;
+`sudo systemctl start plasmashell-wedge-watch.service` followed by `journalctl -t
+plasmashell-wedge-watch --since '-2 min'` is silent against a healthy panel; and the
+forced-failure recipe in `plasmashell-watch/README.md` yields a core. Undo:
+`sudo systemctl disable --now plasmashell-wedge-watch.timer`, `sudo rm -f
+/etc/systemd/system/plasmashell-wedge-watch.{service,timer}
+/usr/local/bin/plasmashell-wedge-watch.sh`, `sudo systemctl daemon-reload`, `sudo rm -rf
+/var/log/plasmashell-wedge`, then drop its row from `system-inventory.md`.
+
+**3. `~/candelise/org_chart.toml`: stale `tmux_bin`.** `vp-journal.service` and
+`vp-tick.service` had failed **986 and 218 times on 2026-10-10**, each dumping a full Python
+traceback, because they exec `/home/mylesp/.local/bin/tmux`, which no longer exists since
+loadout relocated the tool chain. Repointed to the shim that `command -v tmux` resolves to:
+
+    org_chart.toml:  tmux_bin = "/home/mylesp/.local/share/loadout/prefer/tmux"
+
+Verify: `python3 -c "import tomllib;tomllib.load(open('org_chart.toml','rb'))"` parses, and
+the next *scheduled* runs (not manually forced) report `status=0/SUCCESS` with no
+`FileNotFoundError` — confirmed on the 20:29 runs, and the failure count went to zero. Undo:
+restore the previous value; the comment added above the line records why it must not point
+back at `~/.local/bin`. The other three real path keys in that file were checked and are
+sound. The dated prototype
+`superpowers/sdd/2026-09-12-agent-channel/prototype_channel_probe.py` still holds the old
+path and was deliberately left alone as a historical record.
+
+**4. Two things verified correct and deliberately NOT changed,** recorded so they are not
+re-litigated: `pacman.conf`'s commented `#LogFile` is just the shipped default — `pacman-conf
+LogFile` returns `/var/log/pacman.log`, so pacman does log, and the missing 2026-10-09
+transactions are `shelly`'s doing rather than a config fault (uncommenting the line would
+have been a no-op that only *looked* like a fix); and `systemd-coredump.socket` is already
+active with `core_pattern` piped to it, so an empty `coredumpctl list` means nothing has
+crashed, not that capture is broken. Both are now prohibitions in `system-inventory.md`, and
+the `shelly` audit gap is the reason that file says to reconstruct package changes from
+snapper and `pacman -Qi` 'Install Date' rather than from `pacman.log`.
+
+**5. Documentation.** New `plasmashell-wedge.md`; new `plasmashell-watch/` component
+following the `power-management/custom-idle/` precedent (repo holds source, install to a
+live path, README carries the test recipe); `system-inventory.md` gained the watchdog row in
+the unowned-shims list plus four operational notes (journal cap and its override location,
+coredump status, the `shelly`/`pacman.log` gap, and the cross-UID bus rejection); `README.md`
+and `AGENTS.md` both point at the new topic file.
+
+Not done, and why: a full `pacman -Syu`. The last logged transaction is 2026-10-06, only
+`shelly`'s silent ones have run since, and the installed glibc debug data already carries a
+CRC mismatch against the live `libc.so.6`. More to the point, an upgrade's only real
+verification is a reboot, which would kill the very session this was diagnosed from. It
+deserves its own entry and its own pre/post snapshots.
+
+## 2026-10-11 — migration prep: an inventory built to be diffed, and a redaction leak in the published copy
+
+The new NVMe is ordered and the likely route is "install CachyOS fresh on the new disk, then
+rebuild from this repo". That route is only as safe as this repo is complete, and nothing has ever
+tested that claim. So this is a baseline to test it against rather than a plan change.
+
+**1. `scripts/premigration-inventory.sh` (new).** Read-only, ~33 s, plain text, fixed section order,
+sorted, so two runs diff cleanly. It dumps explicit and foreign packages, non-pacman installs, every
+`/etc` file **no package owns** (the section that matters most), unowned `/usr/local` and
+`~/.local/bin` files, enabled system and user units plus timers, fstab/cmdline/efibootmgr/Limine
+hooks and presets, blkid and the btrfs subvolume layout, snapper config, pam/security/polkit files,
+the `~/.config` checklist, and the repositories.
+
+    scripts/premigration-inventory.sh     ->  ~/Documents/premigration-inventory-<date>.txt.gz
+                                             ~/Documents/premigration-inventory-<date>.redacted.txt.gz
+    cp ~/Documents/premigration-inventory-<date>.redacted.txt.gz inventories/
+    # undo: rm the two files; the script itself is repo source
+
+Verify: the script self-tests its redaction rules on every run and exits non-zero if any rule
+fails. Artifacts: 113 KB raw, 30 KB gzipped.
+
+**2. A redaction leak in the published copy, found by that self-test.** `hardware-check.md` claims
+MAC addresses, IP addresses and SSIDs are replaced with `[redacted]` before it lands in this repo.
+That was false. The sed documented in `scripts/hardware-check.sh` did not redact IP addresses at
+all: its `inet6? ` alternative carried its own trailing space, so that branch required two spaces
+between `inet` and the address and never matched anything. Neither MAC branch could match `ip -br`
+or `bluetoothctl` output either, which carries no `link/ether` / `permaddr` anchor. The published
+file therefore carried **six IP addresses, four link-layer MACs and the Bluetooth controller MAC**.
+
+    # values hand-redacted in hardware-check.md; the sed fixed in scripts/hardware-check.sh
+    grep -coiE '([0-9a-f]{2}:){5}[0-9a-f]{2}|[0-9]{1,3}(\.[0-9]{1,3}){3}|::' hardware-check.md  # -> 0
+    grep -c 'Serial Number: \[redacted\]' hardware-check.md                                     # -> 5
+
+The fix adds a context-free MAC rule (six colon-separated hex pairs redacted anywhere) plus bare
+IPv4 and IPv6 rules, so anchorless `ip -br` / `bluetoothctl` shapes are covered. The comments in
+`hardware-check.sh` now forbid reinstating the old form. Verified end-to-end by extracting the sed
+from the script's own comment and running it against everything that had leaked: **zero survivors**,
+and the extracted rule set is byte-identical to the self-tested one. The published file's Network
+and Bluetooth blocks are now hand-redacted rather than machine-generated, and its header says so.
+
+**3. Two disk serials removed from `storage-migration.md`.** The 2026-10-10 corrections there had
+included two serial numbers. This repo redacts serials, so they are gone; the drives are now
+identified by model, capacity, and the PARTUUID of the partition that distinguishes them — which is
+also device-name independent, and device-name independence is the whole point of that correction.
+
+**4. Why this was findable at all.** The first version of the leak check was vacuously true: it
+probed for disk serials and MACs, but `for p in "$(...)"` quotes a multi-line list into a single
+item, and `grep -F` against a multi-line pattern can never match — so it would have reported
+"absent" on a file that leaked. A positive control made it fail, and that failure exposed both the
+meaningless check and the real sed bugs behind the leak. Same lesson as the plasmashell watchdog:
+an untested failure path is not a check.
+
+**5. Also in the same session, in `storage-migration.md`:** the 2026-10-06 device nodes and PCI
+addresses were stale and one was *inverted* (`nvme0n1` was described as the expendable drive and is
+today the live root), so following that rationale would have pulled the wrong disk; the
+"unexplained" `/boot` directory was identified as Limine's 1.9 GiB kernel staging area, which is
+load-bearing; the `FSCK*.REC` count was corrected from six to **384**; an undocumented 96 GiB btrfs
+filesystem on the Windows disk (`nvme1n1p5`, in no fstab, no mount unit, no snapper config, and not
+in the `sda3` backup) was recorded; and so was the fact that the "rollback is a boot-menu entry"
+safety net does not survive a fresh install, because those entries name subvolumes of the current
+btrfs.
+
+Not done: any change to the machine. This entry is an artifact and two documentation fixes.

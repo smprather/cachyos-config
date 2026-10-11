@@ -1,0 +1,14 @@
+[Unit]
+Description=Poll plasmashell liveness for a wedge (every 10s)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=10s
+# systemd's default AccuracySec is 1min, which would make a 10s interval fire wildly
+# late — and late is the one thing this watchdog cannot afford, because the whole point
+# is to capture before systemd's TimeoutSec=40sec SIGKILL lands.
+AccuracySec=1s
+Unit=plasmashell-wedge-watch.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=plasmashell wedge watchdog — capture a backtrace before the timeout kill destroys it
+Documentation=file:/home/mylesp/cachyos-config/plasmashell-watch/README.md
+Documentation=file:/home/mylesp/cachyos-config/plasmashell-wedge.md
+# Deliberately ordered after nothing. The script no-ops when plasmashell is not
+# running, so it is harmless at boot, at the greeter, and in every non-Plasma session.
+# It cannot order after graphical-session.target, which is a *user* target.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/plasmashell-wedge-watch.sh
+# The gdb attach dominates the runtime; the script's own inner timeout bounds it.
+TimeoutStartSec=180
+# Never compete with the desktop it is watching.
+Nice=10
+IOSchedulingClass=idle

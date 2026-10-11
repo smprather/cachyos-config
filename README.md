@@ -34,6 +34,7 @@ reasoning needed to avoid known integration failures.
 - [Standard tools](standard-tools.md) — the living catalogue of everyday desktop tools; anything an agent installs gets a row there
 - [Hardware check](hardware-check.md) — the full read-only hardware survey (board/BIOS, CPU, memory kit, storage map including a degraded `md127` mirror, displays, sensors); regenerate with `scripts/hardware-check.sh`
 - [Storage migration](storage-migration.md) — plan only: moving this OS to a new NVMe, with the PCIe slot facts, the btrfs send/receive route, the Limine ESP move, acceptance tests and rollback
+- [plasmashell wedge](plasmashell-wedge.md) — the 2026-10-10 frozen panel and 40-second logout: the mechanism, what was ruled out, why the trigger is permanently unrecoverable, and the `plasmashell-watch/` watchdog that captures a backtrace before the next timeout kill; plus the `SystemMaxUse=50M` journal cap and the `shelly`-writes-no-pacman-log audit gap
 
 ## Provenance
 

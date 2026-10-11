@@ -7,6 +7,17 @@ unredacted run lives on the machine under `~/Documents/`; the sed that performs 
 redaction is documented at the top of the script. Every line below is command output —
 nothing here is inferred or remembered.
 
+**Corrected 2026-10-11.** The documented sed did not redact IP addresses at all. Its `inet6? `
+alternative carried its own trailing space, so that branch required `inet␣␣ADDR` (two spaces)
+and never matched anything; and neither it nor the MAC branch could match `ip -br` or
+`bluetoothctl` shapes, which have no `inet` / `link/ether` anchor. Because of that this file
+leaked six IP addresses, four link-layer MACs and the Bluetooth controller MAC. Those values
+are `[redacted]` here **by hand**, and the sed in `scripts/hardware-check.sh` is fixed so a
+regeneration cannot reintroduce them. Two things to know when reading the blocks below: the
+Network and Bluetooth blocks are hand-redacted rather than purely machine-generated, and one
+command echo in the `iw dev` block is visibly mangled because the `SSID` rule fired on the
+command text itself instead of on output.
+
 Generated: 2026-10-07T22:15:48-05:00 · machine cachyos-x8664 · kernel 7.2.9-1-cachyos · CachyOS on a Gigabyte B550 AORUS ELITE AX V2
 
 ## System
@@ -583,15 +594,15 @@ card1-HDMI-A-1: status=connected enabled=enabled modes=3440x1440,3840x2160,3840x
 
 ```text
 $ ip -br link; echo; ip -br addr | head -8
-lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
-eno1             UP             74:56:3c:ca:b5:ae <BROADCAST,MULTICAST,UP,LOWER_UP> 
-wlan0            DOWN           da:74:4c:b4:36:71 <BROADCAST,MULTICAST> 
-docker0          DOWN           ea:41:38:ab:c8:da <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+lo               UNKNOWN        [redacted] <LOOPBACK,UP,LOWER_UP> 
+eno1             UP             [redacted] <BROADCAST,MULTICAST,UP,LOWER_UP> 
+wlan0            DOWN           [redacted] <BROADCAST,MULTICAST> 
+docker0          DOWN           [redacted] <NO-CARRIER,BROADCAST,MULTICAST,UP> 
 
-lo               UNKNOWN        127.0.0.1/8 ::1/128 
-eno1             UP             192.168.0.15/24 fe80::5cb:5188:ec9f:a776/64 
+lo               UNKNOWN        [redacted] [redacted] 
+eno1             UP             [redacted] [redacted] 
 wlan0            DOWN           
-docker0          DOWN           172.17.0.1/16 fe80::e841:38ff:feab:c8da/64 
+docker0          DOWN           [redacted] [redacted] 
 ```
 ```text
 $ lspci -nn | grep -i -e ethernet -e "network controller"
@@ -618,7 +629,7 @@ $ rfkill list 2>/dev/null | head -8; echo; iw dev 2>/dev/null | grep -i -e Inter
 ```
 ```text
 $ timeout 5 bluetoothctl show 2>/dev/null | head -8 || echo "bluetoothctl unavailable"
-Controller BC:C7:46:9A:E8:89 (public)
+Controller [redacted] (public)
 	Manufacturer: 0x005d (93)
 	Version: 0x0c (12)
 	Name: cachyos-x8664

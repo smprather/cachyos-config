@@ -104,16 +104,17 @@ pacman operations. The `plasma-meta` install on 2026-08-31 produced snapshot
 
 ## Local files outside package management
 
-Three files live in `/usr/local/bin` — which precedes `/usr/bin` in PATH, so all three
-shadow or wrap system commands — and **no package owns any of them**. Nothing tracked them
-before the 2026-10-06 review. They are listed here because an unowned shim has no
+Four files live in `/usr/local/bin`, and **no package owns any of them**. The first three
+shadow or wrap system commands, since this directory precedes `/usr/bin` in PATH; the
+fourth is unique to this machine. Nothing tracked them before the 2026-10-06 review. They are listed here because an unowned shim has no
 lifecycle: pacman will not update it, will not notice when it becomes obsolete, and will
 not mention it if its behaviour quietly changes.
 
 ```text
-/usr/local/bin/mkinitcpio        Limine boot-safety guard (keep)
-/usr/local/bin/remove-nvidia     legacy name; clears VM guest packages (no-op today)
-/usr/local/bin/MarkdownBlaze     wrapper for the MarkdownBlaze package (expires)
+/usr/local/bin/mkinitcpio                   Limine boot-safety guard (keep)
+/usr/local/bin/remove-nvidia                legacy name; clears VM guest packages (no-op today)
+/usr/local/bin/MarkdownBlaze                wrapper for the MarkdownBlaze package (expires)
+/usr/local/bin/plasmashell-wedge-watch.sh   panel-wedge watchdog (keep; source in plasmashell-watch/)
 ```
 
 - **`mkinitcpio`** — runs the real `/usr/bin/mkinitcpio "$@"`, then for `-P`, `-p`,
@@ -137,6 +138,13 @@ not mention it if its behaviour quietly changes.
   Wayland box (Gdk Error 71, 0 `mdSetDocumentTitle` lines in its log). **This one expires:**
   re-test after a `webkit2gtk-4.1` upgrade by running `/usr/bin/MarkdownBlaze <file.md>`
   directly — if a document renders, delete the wrapper.
+- **`plasmashell-wedge-watch.sh`** — the panel-wedge watchdog. Probes `plasmashell`
+  liveness over D-Bus and, once the probe fails repeatedly, captures a gdb backtrace and
+  core **before** systemd's `TimeoutSec=40sec` SIGKILL can destroy the evidence (see the
+  2026-10-10 entry in `customizations.md` for why that matters). Driven by the system-scope
+  `plasmashell-wedge-watch.timer`, every 10 s. Source, design constraints and the test
+  recipe that exercises its failure path: [plasmashell-watch/](plasmashell-watch/).
+  Rationale: [plasmashell-wedge.md](plasmashell-wedge.md).
 
 Snapper does **not** guard this directory automatically: `/usr/local` is part of `/` (not
 its own subvolume) but nothing snapshots a hand edit. Take one before changing these files:
@@ -164,3 +172,25 @@ sudo snapper -c root create -d "pre: <what you are about to do>"
   line can match the pattern and kill the calling shell. Kill by exact name
   (`pkill -9 -x <comm>`) or by PID. See
   [shell-startup-quirks.md](shell-startup-quirks.md).
+- The journal is capped at **`SystemMaxUse=2G`** by
+  `/etc/systemd/journald.conf.d/50-retention.conf`. `cachyos-settings` ships
+  `SystemMaxUse=50M` in `/usr/lib/systemd/journald.conf.d/00-journal-size.conf`, which
+  retained barely one boot and made the 2026-10-10 panel freeze partly undiagnosable. The
+  `/usr/lib` file is package-owned: **override in `/etc`, never edit it.** Verify with
+  `systemd-analyze cat-config systemd/journald.conf | grep SystemMaxUse` and
+  `journalctl --list-boots`. See [plasmashell-wedge.md](plasmashell-wedge.md).
+- Crash core dumps are **already working** — `systemd-coredump.socket` is active and
+  `core_pattern` pipes to it. `coredumpctl list` being empty means nothing has genuinely
+  crashed, not that capture is broken. A `SIGKILL`, however, never produces a core, which
+  is why a wedged-then-killed process leaves no post-mortem. Do not "enable" coredumps.
+- **`pacman.conf`'s commented `#LogFile` is correct as shipped.** `pacman-conf LogFile`
+  returns `/var/log/pacman.log`, so pacman does log. **`shelly upgrade all` does not write
+  that log**: its transactions leave no `pacman.log` entry at all (2026-10-09 00:17–00:28
+  upgraded `qt6-base` to 6.12.0 and KDE to 6.7.5-3.1, invisibly). Reconstruct what changed
+  from `snapper -c root list` plus `pacman -Qi <pkg> | grep 'Install Date'`.
+- A **user session bus rejects a cross-UID connection.** As root, a `busctl` call to a
+  user's bus fails with `Failed to connect to system scope bus via local transport: Broken
+  pipe`, because dbus-daemon's EXTERNAL auth requires the peer UID to match the bus owner.
+  Any diagnostic that must talk to a user bus and also needs root must split the two:
+  probe via `setpriv --reuid=<uid> --regid=<gid> --init-groups --` (not `runuser`, which
+  opens a PAM session and logs two lines per run), capture as root.

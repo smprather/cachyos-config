@@ -78,6 +78,11 @@ Then read the topic file for the area you are touching:
   is deliberately left alone on its own disk, and the `/boot`-is-the-old-ESP trap that makes
   it a boot-path change rather than a data copy. **Plan only, not executed**; keep it current
   if the plan changes.
+- `plasmashell-wedge.md` for the 2026-10-10 panel freeze: why the taskbar froze and logging
+  out took 40 s (plasmashell wedged, shipped `TimeoutSec=40sec`, SIGKILL), why the trigger is
+  permanently unrecoverable, what was ruled out, and `plasmashell-watch/` — the watchdog that
+  captures a backtrace before the next timeout kill. Also the `SystemMaxUse=50M` journal cap
+  that hid the evidence, and the `shelly`-writes-no-pacman-log audit gap.
 
 ## Hard Rules
 
