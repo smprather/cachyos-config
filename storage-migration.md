@@ -332,3 +332,113 @@ work than it sounds, and nothing here is destructive until step 5.
   expect a fresh ESP to be rebuilt with the same shape rather than copied. Re-run
   `scripts/hardware-check.sh` at migration time rather than trusting today's numbers — disk
   UUIDs, device order and wear figures will all have moved.
+
+## Disposing of Windows — approach settled, date not (2026-10-11)
+
+Windows is effectively abandoned here (the owner's words: "good riddance"). The intent is to
+houseclean it one day and move it to an external spinning disk so the 980 PRO becomes pure Linux.
+**Nothing here is scheduled and nothing has been done** — but the approach is settled, and these
+parts are not worth re-deriving.
+
+### The WSL2 space is the real reclaim, and it is not "shrinking C:"
+
+`ext4.vhdx` is expandable and **never shrinks itself**: deleting files *inside* a distro frees
+nothing on the host. Three steps, in this order — the first is the one that gets skipped, and
+skipping it is why compaction then "reclaims nothing":
+
+```bash
+# inside WSL
+sudo fstrim -av
+# from Windows
+wsl --shutdown
+diskpart
+  select vdisk file="<path>\ext4.vhdx"
+  attach vdisk readonly
+  compact vdisk
+  detach vdisk
+```
+
+`Optimize-VHD -Mode Full` does the same job where the Hyper-V PowerShell module exists. On newer
+WSL, `wsl --manage <Distro> --set-sparse true` makes the VHDX sparse once and it returns space by
+itself thereafter. For a distro that is dead, `wsl --export <Distro> <file.tar>` then
+`wsl --unregister <Distro>` removes its VHDX outright.
+
+Do not assume the VHDX path: newer WSL keeps distros under `%LOCALAPPDATA%\wsl\`, so locate the
+file (`wsl --list -v` gives per-distro sizes, then search for `*.vhdx`) rather than trusting the
+older `Packages\...\LocalState` location.
+
+### Shrinking C: is conditional — and the condition is the clone method
+
+An earlier revision of this section said flatly "do not shrink". That is right for Linux's benefit
+and **wrong when the clone target is smaller than the partition.** Both cases, explicitly:
+
+- **Block-level clone** (`dd`, `ntfsclone`, Macrium) copies the whole partition, so the target must
+  be at least `p1`'s size: **487.5 GiB**. A "500 GB" drive is only **465 GiB usable**, so it is too
+  small — shrink C: first, or use a file-level copy instead.
+- **File-level copy** (`dism` capture/apply, or `robocopy` + `bcdboot`) needs only *used* space, so a
+  small cheap target works. This is the route that makes a $20–30 drive viable.
+- **If Windows is leaving anyway and the target is ≥ 488 GiB, skip the shrink.** It only buys
+  something when Windows *stays*. `Shrink Volume` also cannot pass the last immovable file
+  (pagefile, hiberfil, MFT, shadow copies) — `powercfg /h off`, a pagefile change and a defrag are
+  the usual workarounds — and the space it frees appears **between `p1` and `p2`**, so it does not
+  become Linux space either.
+
+### ⚠️ BitLocker is the data-loss risk in this move, not the medium
+
+If `C:` is encrypted — and Windows 11 enables "Device Encryption" by default with a Microsoft
+account, so Home machines are often encrypted without the owner realising — cloning it to a
+different storage bus can trip the TPM seal and produce a **recovery-key prompt**. Without that key
+the clone is unbootable *and* its data is unrecoverable. Check and save the key **before** touching
+anything:
+
+```bat
+manage-bde -status C:
+manage-bde -protectors -disable C: -rebootcount 2    :: suspend across the clone
+```
+
+This cannot be checked from this Linux — there is no NTFS support here (see below).
+
+### The order that pays off, and it needs no shrinking
+
+houseclean in Windows → compact the VHDX → clone to the target → **verify the target boots** → then,
+from Linux, delete `p1`–`p4`. Deleting them makes the freed region contiguous *before* `p5`, and
+because `/scratch` is disposable there is nothing to resize: **delete the scratch filesystem and
+recreate one partition spanning the whole disk.** That is ~930 GiB of Linux NVMe instead of 443 GiB,
+with no data movement and no risk. Then `sudo efibootmgr -b 0000 -B` to clear the stale Windows
+entry — from Linux or firmware setup, because Windows cannot do it. Keep Windows' ESP and recovery
+partition *with* Windows on the target rather than relying on the copies on this disk.
+
+### Media: an external spinning disk, for retention
+
+Flash loses charge unpowered. The conservative spec (JEDEC) asks a *worn* client SSD to retain data
+for only ~1 year at 30 °C, while spinning disks hold data magnetically for far longer — so for a
+drawer archive an HDD is the right call. Footnote: an HDD wants an **annual spin-up** for its
+bearings and lubricant, so "in a drawer" is not zero-maintenance either.
+
+Price calibration (checked 2026-10-11, volatile): new 1 TB portables sit around **$50–75**, so
+**$20–30 reaches used/refurb** — e.g. a used bare 2.5" 500 GB at ~$25 plus a $5–7 USB enclosure. If
+buying used, check SMART (power-on hours, reallocated sectors) first.
+
+**What that purchase actually buys is portability, and nothing else.** `sda2` is 5.5 TB of NTFS,
+currently unmounted, with identical retention characteristics plus more room and higher speed. If
+Windows does not need to physically leave the machine, that costs nothing.
+
+And no bare medium protects against rot — what protects against rot is **detection this machine
+already has**: btrfs checksums every block, so `btrfs scrub` on `12TB_2` (`sda3`) turns silent
+corruption into a known event. Precise limit: on single-device btrfs with metadata DUP, scrub
+*detects* data corruption and can repair metadata, but data at ratio 1.00 cannot be repaired — it
+tells you to re-fetch. So the durable answer is a verified image on btrfs, with any external copy as
+convenience.
+
+Boot-from-USB caveats, if the external becomes the boot medium: bus-powered 2.5" drives spin down
+aggressively (set power management to never sleep, or Windows can stall mid-boot), cheap USB-SATA
+bridges drop under load and can take the boot volume with them (prefer UASP-capable), and Windows
+Update over USB HDD is slow enough to make sessions long.
+
+### This Linux cannot read NTFS at all
+
+Verified 2026-10-11 three ways: no `ntfs-3g` package, no `ntfs3` in the kernel, no `libntfs*`. So
+`C:` cannot be inspected, the VHDX cannot be located, and a Linux-side `ntfsclone` is impossible as
+things stand — every step that touches Windows data must happen **from Windows**. Installing
+`ntfs-3g` (`sudo pacman -Syu ntfs-3g`, with a pre-snapshot and a customizations entry) would allow
+read-only inspection from here.
