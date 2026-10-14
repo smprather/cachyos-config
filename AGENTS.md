@@ -242,6 +242,31 @@ present and on `PATH`.
 - Keep new notes concise and operational: desired end state, exact commands or
   files, verification, rollback, and non-obvious reasoning.
 
+## Agent Contract
+
+An agent may change this machine, but only inside these bounds. Each one exists because the
+machine taught it, not because a rule book predicted it — treat them as incident reports:
+
+1. **Every change gets an undo line.** Package, config file, unit, timer, drop-in, PATH shim:
+   if it cannot be written down as a replayable command pair (do / undo, plus verification), it
+   does not get done. `customizations.md` is append-only; topic files record net state.
+2. **Never bypass the audit trail.** `shelly upgrade all` performs real pacman transactions and
+   writes **no** `/var/log/pacman.log` — one upgrade on this machine had to be reconstructed from
+   snapper because of it (`plasmashell-wedge.md`). Use `pacman -Syu`. If a tool's effects cannot
+   be reconstructed from the journal, the pacman log and snapper, it must not change the system.
+3. **No new session-level component without a written decision.** Extra desktops, notification
+   daemons, portals, display managers: that is how this install became four sessions, six portals
+   and three claimants for `org.freedesktop.Notifications`. Adding one is a documented decision
+   with a stated cost, never a side effect of satisfying a request — see `desktop-environments.md`
+   and `fresh-install-checklist.md`.
+4. **Nothing unattended that can restart forever.** `Restart=always` plus a broken `ExecStart`
+   retries every `RestartSec` indefinitely — `hermes-gateway` reached 15 488 restarts in a single
+   boot and drowned the evidence for an unrelated fault. Bound it (`StartLimitIntervalSec`,
+   `RestartSec`) or leave it off.
+5. **The mechanical check is the inventory diff, not anyone's memory** — including the agent's.
+   `scripts/premigration-inventory.sh` before and after any large change (reinstall, migration,
+   desktop addition) is what catches an unlogged change. Run it and read the diff.
+
 ## Quick Orientation Commands
 
 Use read-only checks first:
