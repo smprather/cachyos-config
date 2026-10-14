@@ -29,6 +29,9 @@
 #   PWW_NO_GDB=1       skip the gdb attach (capture /proc data only)
 #   PWW_CORE_RETAIN    number of newest cores to keep (default 2)
 #   PWW_MIN_UPTIME     skip instances younger than this many seconds (default 90)
+#   PWW_SPIN_THRESHOLD core fraction considered a spin (default 0.5)
+#   PWW_SPIN_STRIKES   consecutive spin samples required before capturing (default 3)
+#   PWW_CLK_TCK        jiffies per second, for tests (default: getconf CLK_TCK)
 
 set -uo pipefail
 
@@ -83,6 +86,13 @@ owner_gid="$(ps -o gid= -p "$pid" 2>/dev/null | tr -d ' ')"
 # A healthy plasmashell answers Peer.Ping in ~2ms. QtDBus dispatches on the main
 # event loop, so a wedged main thread cannot answer at all -- that is what makes
 # this a real liveness test and not a CPU-usage guess.
+#
+# Counterexample, found 2026-10-14: plasmashell's main thread was pinned at ~100% of
+# one core inside Qt's EGL fallback-surface path while the event loop kept dispatching,
+# so this probe answered in ~2ms and scored zero strikes while the panel was unusable
+# (every applet runs in-process, so they all froze together). A responsive bus is
+# therefore NOT proof of a healthy panel. The CPU-spin source below is the one that
+# would have caught it.
 probe() {
     if [[ -n "${PWW_PROBE:-}" ]]; then
         bash -c "$PWW_PROBE" >/dev/null 2>&1
@@ -97,21 +107,82 @@ probe() {
         org.kde.plasmashell / org.freedesktop.DBus.Peer Ping >/dev/null 2>&1
 }
 
-if probe; then
-    rm -f "$STRIKE_FILE"
-    exit 0
+# ------------------------------------------------------------ CPU-spin source
+# Second, independent signal. The probe above only sees a blocked event loop; a panel
+# whose event loop is alive but pinned never fails it. Sample utime+stime each tick and
+# strike when the process burns more than $SPIN_THRESHOLD of one core for several
+# consecutive samples. A healthy panel measures ~0-0.05 of a core, and the consecutive
+# sample requirement is what keeps a burst of ordinary animation from tripping it.
+SPIN_THRESHOLD="${PWW_SPIN_THRESHOLD:-0.5}"
+SPIN_STRIKES="${PWW_SPIN_STRIKES:-3}"
+SPIN_FILE="$STATE_DIR/.spin"
+SPIN_STRIKE_FILE="$STATE_DIR/.spinstrikes"
+CLK_TCK="${PWW_CLK_TCK:-$(getconf CLK_TCK 2>/dev/null || echo 100)}"
+
+# utime+stime in jiffies. Field 2 (comm) can contain spaces and parentheses, so strip
+# everything through the LAST ") " before field-splitting; the remainder's fields 12 and
+# 13 are then the original fields 14 and 15.
+cpu_jiffies() {
+    local s
+    s="$(cat "/proc/$pid/stat" 2>/dev/null)" || return 1
+    awk '{print $12 + $13}' <<< "${s##*\) }"
+}
+
+spin_frac=""          # empty means: no usable sample, so no spin judgement this tick
+spin_count=0
+spin_hot=0
+if j="$(cpu_jiffies)" && now="$(cut -d' ' -f1 /proc/uptime)"; then
+    prev_pid=""; prev_j=""; prev_now=""
+    if [[ -r "$SPIN_FILE" ]]; then
+        read -r prev_pid prev_j prev_now < "$SPIN_FILE" 2>/dev/null || true
+    fi
+    printf '%s %s %s\n' "$pid" "$j" "$now" > "$SPIN_FILE"
+    if [[ "$prev_pid" == "$pid" && -n "$prev_j" && -n "$prev_now" ]]; then
+        spin_frac="$(awk -v dj="$(( j - prev_j ))" \
+                         -v a="$now" -v b="$prev_now" -v hz="$CLK_TCK" \
+                         'BEGIN{ dt = a - b; if (dt <= 0) exit 1; printf "%.2f", (dj/hz)/dt }')" || spin_frac=""
+    fi
+fi
+if [[ -n "$spin_frac" ]] && awk -v f="$spin_frac" -v t="$SPIN_THRESHOLD" 'BEGIN{exit !(f>=t)}'; then
+    spin_hot=1
+    prev_pid=""; prev_spin=0
+    if [[ -r "$SPIN_STRIKE_FILE" ]]; then
+        read -r prev_pid prev_spin < "$SPIN_STRIKE_FILE" 2>/dev/null || true
+    fi
+    [[ "$prev_pid" == "$pid" && "$prev_spin" =~ ^[0-9]+$ ]] || prev_spin=0
+    spin_count=$(( prev_spin + 1 ))
+    printf '%s %s\n' "$pid" "$spin_count" > "$SPIN_STRIKE_FILE"
+    log "plasmashell pid $pid burning ${spin_frac} of one core (spin strike $spin_count/$SPIN_STRIKES)"
+else
+    rm -f "$SPIN_STRIKE_FILE"
 fi
 
-# ------------------------------------------------- count consecutive failures
-prev_pid=""; count=0
-if [[ -r "$STRIKE_FILE" ]]; then
-    read -r prev_pid count < "$STRIKE_FILE" 2>/dev/null || true
+# ---------------------------------------------------------------- decide
+probe_ok=0
+probe && probe_ok=1
+if (( probe_ok )); then
+    rm -f "$STRIKE_FILE"
+else
+    # --------------------------------------------- count consecutive failures
+    prev_pid=""; count=0
+    if [[ -r "$STRIKE_FILE" ]]; then
+        read -r prev_pid count < "$STRIKE_FILE" 2>/dev/null || true
+    fi
+    [[ "$prev_pid" == "$pid" && "$count" =~ ^[0-9]+$ ]] || count=0
+    count=$(( count + 1 ))
+    printf '%s %s\n' "$pid" "$count" > "$STRIKE_FILE"
+    log "plasmashell pid $pid failed liveness probe (strike $count/$STRIKES_REQUIRED)"
 fi
-[[ "$prev_pid" == "$pid" && "$count" =~ ^[0-9]+$ ]] || count=0
-count=$(( count + 1 ))
-printf '%s %s\n' "$pid" "$count" > "$STRIKE_FILE"
-log "plasmashell pid $pid failed liveness probe (strike $count/$STRIKES_REQUIRED)"
-[[ "$count" -ge "$STRIKES_REQUIRED" ]] || exit 0
+
+capture=0; reason=""
+if (( ! probe_ok )) && (( count >= STRIKES_REQUIRED )); then
+    capture=1; reason="liveness probe failed $count consecutive times"
+fi
+if (( spin_hot )) && (( spin_count >= SPIN_STRIKES )); then
+    capture=1
+    reason="${reason:+$reason; }CPU burn ${spin_frac} of one core for $spin_count consecutive samples"
+fi
+(( capture )) || exit 0
 
 # ---------------------------------------------------------------- capture
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -124,7 +195,9 @@ base="$STATE_DIR/wedge-$stamp"
     echo "uptime_seconds:  ${etimes:-unknown}"
     echo "comm:            $(cat /proc/"$pid"/comm 2>/dev/null)"
     echo "cmdline:         $(tr '\0' ' ' < /proc/"$pid"/cmdline 2>/dev/null)"
-    echo "strikes:         $count"
+    echo "reason:          $reason"
+    echo "probe_strikes:   ${count:-0} of $STRIKES_REQUIRED"
+    echo "spin_strikes:    ${spin_count:-0} of $SPIN_STRIKES (last sample ${spin_frac:-n/a} of one core)"
     echo
     echo "=== /proc/$pid/status ==="
     cat "/proc/$pid/status" 2>/dev/null
@@ -180,7 +253,7 @@ if (( ${#cores[@]} > CORE_RETAIN )); then
     for f in "${cores[@]:CORE_RETAIN}"; do rm -f "$f"; done
 fi
 
-log "CAPTURED plasmashell wedge -> $base.txt (+ $base.gdb.txt, core if gdb succeeded)"
+log "CAPTURED plasmashell wedge ($reason) -> $base.txt (+ $base.gdb.txt, core if gdb succeeded)"
 
 # ------------------------------------------------- optional auto-kill (opt-in)
 if [[ -f "$AUTO_KILL_FLAG" ]]; then

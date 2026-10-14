@@ -4051,3 +4051,232 @@ claim the space.
 adjacent to Windows C:, so it cannot be folded back into it without moving the recovery, ESP and
 MSR partitions between them — and p3 is the Windows ESP. The realistic options are an NTFS data
 volume or Linux scratch; the format decision is still open.
+
+## 2026-10-11 — konsole installed (and the full `-Syu` that came with it)
+
+Requested as "install konsole". `pacman -Q konsole` said absent and there was no binary on
+`PATH`.
+
+    sudo pacman -Syu --noconfirm konsole
+    # undo: sudo pacman -Rns konsole
+
+snapper pre **177**, post **178**. konsole **26.08.2-1.1** from `cachyos-extra-v3` (2.43 MiB
+download, 10.83 MiB installed). The `-Syu` was not a no-op: the sync databases had last been
+refreshed 2026-10-09, so the transaction was **138 packages** — 5 installs (konsole, plus
+`librist`, `cjson`, `libmicrohttpd`, `mbedtls3`) and 133 upgrades, 1.09 GiB downloaded,
+3.41 GiB installed. The four new dependencies are not konsole's: `vlc-plugins-base` requires
+`librist`, and the other three are required by `librist` — they belong to the VLC plugin split
+in the same transaction. Both `linux-cachyos` and `linux-cachyos-lts`, their `-nvidia-open`
+modules and `nvidia-utils` were upgraded, so pacman printed "Reboot is recommended"; **the
+reboot has not been taken as of this entry.**
+
+Verified: `pacman -Qkk konsole` → 386 files, 0 altered; `ldd /usr/bin/konsole` has no
+unresolved library; `/usr/share/applications/org.kde.konsole.desktop` is present; and a real
+GUI smoke test ran a shell inside a konsole window
+(`konsole -e /usr/bin/sh -c '... > /tmp/konsole-smoke.txt'`) — exit 0, file written, empty
+stderr, no lingering process.
+
+The pre-existing `.pacnew` set in `/etc` and the `core-debug.db` 404s both appeared again in
+this transaction; both were already recorded earlier in this file.
+
+## 2026-10-14 — Hermes removed (everything)
+
+`hermes-gateway.service` had been crash-looping for days: `ExecStart` pointed at
+`/home/mylesp/.hermes/hermes-agent/venv/bin/python`, which no longer exists, so every start
+died `status=203/EXEC` and `Restart=always` retried it every 5 s — **15 488** restarts in the
+boot that ended 2026-10-14 07:48, ~3 100 more in the boot after it, and ~40 % of the journal
+volume in both. The agent code and its venv were **already gone** before this entry; what
+remained was the unit, three `~/.local/bin` shims pointing at the missing venv, a
+pre-migration copy of those shims, and ~1.4 MB of state (dbs, cron, cache, logs, and a
+`host-serve.token` under `~/.local/state/hermes/gateway-locks/`).
+
+Archived first, because a user-scope install has no snapper fallback:
+
+    systemctl --user disable --now hermes-gateway.service
+    mkdir -p ~/Documents/removed
+    tar --zstd -cf ~/Documents/removed/hermes-removed-20261014-091342.tar.zst \
+        .hermes .local/state/hermes \
+        .config/systemd/user/hermes-gateway.service \
+        .config/systemd/user/default.target.wants/hermes-gateway.service \
+        .local/bin/{hermes,hermes-agent,hermes-acp} \
+        .local/bin.premigrate-2026-10-06/{hermes,hermes-agent,hermes-acp}
+    chmod 600 ~/Documents/removed/hermes-removed-20261014-091342.tar.zst
+
+Then the removal itself:
+
+    rm -f  ~/.config/systemd/user/hermes-gateway.service \
+           ~/.config/systemd/user/default.target.wants/hermes-gateway.service
+    rm -rf ~/.hermes ~/.local/state/hermes
+    rm -f  ~/.local/bin/{hermes,hermes-agent,hermes-acp} \
+           ~/.local/bin.premigrate-2026-10-06/{hermes,hermes-agent,hermes-acp}
+    sudo rm -rf ~/.hermes      # five root-owned files under cache/scratch/macro_drc2/run
+    systemctl --user daemon-reload
+    # undo: tar --zstd -xf ~/Documents/removed/hermes-removed-20261014-091342.tar.zst -C ~ \
+    #       && systemctl --user daemon-reload \
+    #       && systemctl --user enable --now hermes-gateway.service
+
+Archive: 61 entries, 60 KB, mode 600 (it contains `host-serve.token`, hence 600).
+
+Verified: `systemctl --user list-unit-files | grep -i hermes` → none; `find ~ -iname
+'*hermes*'` → only the archive; `journalctl --since … | grep -c hermes` → 0; and
+`systemctl --user is-system-running` → `running` with no failed units. Not loadout-managed:
+nothing under `~/.loadout` or `~/.local/share/loadout/bin` referenced these shims, so nothing
+regenerates them.
+
+Repo references corrected in the same pass, because they pointed at Hermes paths:
+
+- `engineering-loadout-path.md` — `hermes*` dropped from the `~/.local/bin` keep-list.
+- `passwordless-login.md` — the pacman keyring-hook section installed from
+  `~/.hermes/cache/scratch/95-keyring-pam-guard.hook`. That file was **already absent**
+  (checked before any deletion) and is now gone with the tree, so the section is marked as
+  "not installed" with the hook body to be recreated. Nothing in the repo held a copy.
+- `tests/check-tmux-guard.sh` — the two Hermes halves (the `~/.hermes/SOUL.md` instruction
+  file and `hermes approvals.deny` plus its runtime batteries) removed; Claude Code, Codex
+  and OpenCode checks remain.
+- `tests/tmux-deny-check.sh` + `tests/tmux-deny-tests.txt` — deleted: the battery drove
+  `hermes approvals test` and nothing else. Undo: `git checkout HEAD -- tests/tmux-deny-check.sh
+  tests/tmux-deny-tests.txt` (both are committed at `87944d9`).
+
+## 2026-10-14 (later) — the panel froze again, in a mode the watchdog could not see
+
+`plasmashell`'s main thread was pinned at ~100 % of one core inside Qt's EGL
+fallback-surface retry — `QRhiGles2InitParams::newFallbackSurface` →
+`QOpenGLContext::destroy` → `libnvidia-eglcore.so.615.78.08` — entered from
+`processExposeEvent`, so the frame never completed and every panel applet froze with it
+(they run in-process). `Peer.Ping` kept answering in ~2 ms throughout, which is exactly why
+the 2026-10-10 watchdog captured nothing: it only sees a *blocked* event loop. Full
+backtrace, dead ends and the KVM/EDID link: `plasmashell-wedge.md`.
+
+Changes, all reversible:
+
+    # 1. watchdog gains a CPU-spin source (utime+stime per tick)
+    sudo install -Dm0755 plasmashell-watch/plasmashell-wedge-watch.sh \
+                        /usr/local/bin/plasmashell-wedge-watch.sh
+    # failure paths exercised with the script's own seams:
+    #   spin:    PWW_PROBE=true  PWW_SPIN_STRIKES=2 PWW_SPIN_THRESHOLD=0.2 (3 runs, burner)
+    #   blocked: PWW_PROBE=false PWW_STRIKES=1                          (1 run, sleep)
+    # both wrote a capture; the live panel path stayed silent and wrote none
+    # undo: git checkout HEAD -- plasmashell-watch/plasmashell-wedge-watch.sh \
+    #       && sudo install -Dm0755 plasmashell-watch/plasmashell-wedge-watch.sh \
+    #            /usr/local/bin/plasmashell-wedge-watch.sh
+
+    # 2. auto-recovery: a captured spin now ends with SIGKILL, so Restart=on-failure
+    #    respawns the panel. Capture always precedes the kill.
+    sudo touch /etc/plasmashell-wedge-watch.autokill
+    # undo: sudo rm /etc/plasmashell-wedge-watch.autokill
+
+    # 3. one-word manual answer, source of truth in the repo
+    ln -s /home/mylesp/cachyos-config/bin/fixpanel ~/.local/bin/fixpanel
+    # undo: rm ~/.local/bin/fixpanel && git rm bin/fixpanel
+
+Tried and reverted inside the hour: a `QSG_RHI_BACKEND=software` drop-in for
+`plasma-plasmashell.service`, intended to keep the shell off the EGL path. This Qt build
+has no RHI software backend — plasmashell logged `Unknown key "software" for
+QSG_RHI_BACKEND, falling back to default backend.` and kept the entire NVIDIA EGL stack
+mapped, so the containment was never in effect. The drop-in was removed rather than left as
+a no-op. (Recorded so it is not attempted again.)
+
+Also characterised, no change made: the `i2c_open_bus_basic … errno=EACCES` lines are
+PowerDevil's ddcutil DDC/CI probe racing udev's `uaccess` ACL by milliseconds on i2c nodes
+the NVIDIA driver has just created. The nodes do get `user:mylesp:rw-` and
+`TAGS=:uaccess:seat:`, a rule for it already ships (`/usr/lib/udev/rules.d/60-ddcutil-i2c.rules`),
+and nothing is broken by the failure. Do not add a udev rule for it.
+
+Health sweep the same pass (read-only): effective journal cap already **2G** via
+`/etc/systemd/journald.conf.d/50-retention.conf` (packaged `00-journal-size.conf` is the
+50M that hid the 2026-10-10 evidence — override present, working); `btrfs device stats /`
+all zero; boot 36.7 s total (14.1 firmware + 8.6 userspace); kernel taint 4096 (out-of-tree
+NVIDIA module, expected); 0 pending updates; `md127` `active (auto-read-only)` degraded
+raid1 on `sdb3` alone (documented, untouched); `/` at 87 % with 31 G free; the
+`*.pacnew` set unchanged from what is already recorded above.
+
+Still the two open items from `plasmashell-wedge.md`: the NVIDIA driver generation
+(615.78.08-2 / linux-cachyos-nvidia-open 7.2.9-2, both upgraded 2026-10-11 15:27; the
+615.71.09-1 and 610.57.04-1 packages are still in `/var/cache/pacman/pkg` for an offline
+rollback) and — **retracted in the entry below, measured rather than assumed** — the KVM's
+EDID behaviour: the KVM in use does emulate EDID and holds the link across a switch, so
+the `Placeholder-1` flapping was not a KVM artifact.
+
+## 2026-10-14 (evening) — the shell is contained, the rescue rungs are verified
+
+Follow-on to the entry above. Four changes, all reversible, plus one retraction.
+
+**The shell is now off the NVIDIA EGL path** — the containment the earlier entry recorded as a
+dead end, reached a different way:
+
+    # ~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf
+    #   __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+    #   LIBGL_ALWAYS_SOFTWARE=1
+    #   MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+    systemctl --user daemon-reload && systemctl --user restart plasma-plasmashell.service
+    # verify — this must print nothing:
+    grep -oE 'lib(EGL|GLX|nvidia)[^ /]*' /proc/$(pgrep -x plasmashell)/maps
+    # measured idle cost: 0.02 of one core over 10 s (GPU-rendered was ~2.5 %)
+    # undo: rm that drop-in, daemon-reload, restart the unit
+
+`QSG_RHI_BACKEND=software` was the first attempt and is not available in this Qt build
+(`Unknown key "software" for QSG_RHI_BACKEND, falling back to default backend`). Pinning
+Mesa's EGL vendor plus `LIBGL_ALWAYS_SOFTWARE=1` reaches the same outcome through a path Qt
+does support, and the `newFallbackSurface` retry loop can no longer run in the shell.
+
+**A passwordless rescue shell on VT3** (`Ctrl+Alt+F3`), because this machine had no getty at
+all — that key combination used to be a blank screen:
+
+    sudo install -Dm644 /dev/stdin /etc/systemd/system/getty@tty3.service.d/autologin.conf <<'EOF'
+    [Service]
+    ExecStart=
+    ExecStart=-/usr/bin/agetty --autologin mylesp --noreset --noclear - ${TERM}
+    EOF
+    sudo systemctl daemon-reload && sudo systemctl enable --now getty@tty3
+    # verified: -bash as mylesp on tty3, logind session 3, pam_unix session opened
+    # undo: sudo rm -rf /etc/systemd/system/getty@tty3.service.d && sudo systemctl daemon-reload
+    #       && sudo systemctl disable --now getty@tty3
+
+**A hard hang now reboots itself** — the cmdline half that `nowatchdog` was blocking:
+
+    sudo cp -a /etc/default/limine /etc/default/limine.bak-20261014
+    sudo cp -a /boot/limine.conf /boot/limine.conf.bak-20261014
+    sudo sed -i 's/quiet nowatchdog splash/quiet splash/' /etc/default/limine
+    sudo limine-update
+    # plus /etc/sysctl.d/99-recovery.conf: kernel.panic=15, kernel.hardlockup_panic=1
+    # verified: the live entries now read "quiet splash"; limine.conf still has 166 entries
+    #           and 106 snapshot entries (unchanged). The snapshot entries keep nowatchdog,
+    #           baked in when they were taken — expected, and they remain bootable.
+    # after the next reboot: /proc/cmdline, /proc/sys/kernel/nmi_watchdog (expect 1),
+    #           hardlockup_panic (1), panic (15)
+    # undo: restore both backups and re-run `sudo limine-update`
+
+**A weekly NVIDIA driver tracker**, so a driver change is noticed rather than discovered:
+
+    systemctl --user enable --now nvidia-driver-watch.timer
+    # bin/nvidia-driver-watch.sh + ~/.config/systemd/user/nvidia-driver-watch.{service,timer}
+    journalctl --user -t nvidia-driver-watch
+    # first run: "nvidia-utils 615.78.08-2 is current — source: fresh repo query (checkupdates)"
+    # undo: systemctl --user disable --now nvidia-driver-watch.timer; rm the two unit files
+
+The driver was **not** rolled back and **not** pinned, on purpose. The prebuilt module
+packages pin exact versions (`linux-cachyos-nvidia-open` requires `linux-cachyos=<exact>` and
+`nvidia-utils=<exact>`; `linux-cachyos-lts-nvidia-open` does the same for the LTS pair), so
+holding the driver means holding both kernels — and the NVRM resume assertions appear on
+615.71.09 too (1 961 lines in the boot that ran mostly on it). With the shell contained, that
+trade is not worth making today. `nvidia-open-dkms` is the pin-free alternative if a hold is
+ever wanted: hold the driver, keep the kernels moving, let DKMS rebuild.
+
+**Retraction.** The entry above blamed the KVM's missing EDID emulation. Measured, that is
+wrong: across a real switch the connector stayed `connected` at 1 Hz for 97 s with an
+unchanged EDID hash and zero `Placeholder-1` events, while the KVM's USB emulated devices
+re-attached exactly as designed. `desktop-environments.md` and `plasmashell-wedge.md` carry
+the same correction.
+
+New file: `frozen-system-recovery.md` — the ladder for a frozen system (panel → VT3 → power
+button → limine snapshot), including what REISUB can and cannot do here and why keyd's
+`print = f13` must stay.
+
+Also corrected: the earlier "0 pending updates" reading came from the stale local sync DB.
+`checkupdates` against fresh repo data reports **35** upgradable packages (no driver among
+them).
+
+Machine changes outside this repo, for the record: `/etc/plasmashell-wedge-watch.autokill`
+(autokill enabled), `/etc/sysctl.d/99-recovery.conf`, the VT3 getty drop-in, and the limine
+cmdline edit — each with its undo above or in `frozen-system-recovery.md`. Hermes was removed
+entirely (archive: `~/Documents/removed/hermes-removed-20261014-091342.tar.zst`).

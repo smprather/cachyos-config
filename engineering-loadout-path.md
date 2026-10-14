@@ -83,10 +83,14 @@ different options than the previous build (`bash`, `broot`, `btm`, `fd`, `fzf`,
 
 `~/.local/bin` went from 351 entries to 27. What remains is deliberately
 non-EL and must not be pruned: `pi`, `claude`, `codex`, `cua-driver`,
-`cave`, `caveman`, `dsh`, `hermes*`, `muse`, `region-screenshot`,
+`cave`, `caveman`, `dsh`, `fixpanel`, `muse`, `region-screenshot`,
 `wezterm-tune`, `custom-idle.sh`, `persist-autosave.sh`, `gnome-tweaks`,
 `repowise*`, `agent-deck`, `alacritty-theme`, `hyde-shell`, `hydectl`,
 `surfer`, `xdg-terminal-exec`.
+
+(`hermes*` was on this list until 2026-10-14. Those three shims are gone — they pointed at a
+venv that had already disappeared, and the rest of Hermes went with them. See
+`customizations.md`.)
 
 **Prune with an absolute `/usr/bin/rm`.** A loop that deletes `rm` while `rm`
 resolves through `~/.local/bin` fails on every subsequent iteration — that

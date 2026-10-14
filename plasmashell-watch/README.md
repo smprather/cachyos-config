@@ -29,6 +29,14 @@ The liveness probe is a D-Bus `Peer.Ping` to `org.kde.plasmashell`. QtDBus dispa
 the main event loop, so a healthy instance answers in ~2 ms and a wedged one cannot answer
 at all. It is a true liveness test, not a CPU-usage guess.
 
+**It is not sufficient on its own.** On 2026-10-14 plasmashell's main thread was pinned at
+~100 % of one core inside Qt's EGL fallback-surface retry while the event loop kept
+dispatching: the probe answered in ~2 ms, scored zero strikes, and the panel was unusable
+(see `../plasmashell-wedge.md`). The probe only sees a *blocked* loop. That is why the
+script now samples CPU as a second, independent source — a healthy panel measures ~0–0.05
+of a core, and `PWW_SPIN_STRIKES` consecutive samples above `PWW_SPIN_THRESHOLD` trigger a
+capture on their own.
+
 It is passive. It never signals plasmashell unless the auto-kill flag is created by hand.
 
 ## Install
@@ -47,12 +55,13 @@ sudo systemctl enable --now plasmashell-wedge-watch.timer
 systemctl list-timers plasmashell-wedge-watch.timer   # NEXT within 10s
 sudo systemctl start plasmashell-wedge-watch.service  # a healthy panel: silent, exit 0
 journalctl -t plasmashell-wedge-watch --since '-5 min'  # expect NO output
-ls -lA /var/log/plasmashell-wedge/                     # expect empty
+sudo ls -lA /var/log/plasmashell-wedge/                # expect only .spin, never wedge-*
 ```
 
-A healthy run is silent and leaves nothing behind — verified by running it repeatedly
-against a healthy panel (no capture, no accumulated strike file). A run costs ~80 ms,
-so at a 10 s interval it is well under 1 % of one core.
+A healthy run is silent and leaves nothing behind except the `.spin` sample it compares
+against next tick (and `.spinstrikes` only while it is actually counting). No capture, no
+accumulated strike file. A run costs ~80 ms, so at a 10 s interval it is well under 1 % of
+one core.
 
 **Never accept this watchdog on the strength of a healthy run alone.** The failure path is
 the one that matters, and it is testable without touching your real panel:
@@ -66,8 +75,29 @@ sudo PWW_PID=$SP PWW_PROBE=false PWW_STRIKES=1 PWW_MIN_UPTIME=0 \
 ls -lA /tmp/pww-test/
 ```
 
-Test seams: `PWW_PID`, `PWW_PROBE`, `PWW_STRIKES`, `PWW_STATE_DIR`, `PWW_NO_GDB`,
-`PWW_CORE_RETAIN`, `PWW_MIN_UPTIME`, `PWW_AUTO_KILL_FLAG`.
+Test seams: `PWW_PID`, `PWW_PROBE`, `PWW_STRIKES`, `PWW_SPIN_THRESHOLD`,
+`PWW_SPIN_STRIKES`, `PWW_CLK_TCK`, `PWW_STATE_DIR`, `PWW_NO_GDB`, `PWW_CORE_RETAIN`,
+`PWW_MIN_UPTIME`, `PWW_AUTO_KILL_FLAG`.
+
+### Exercising the CPU-spin source
+
+The spin path needs two samples from the same pid (the first tick only establishes a
+baseline), so run it three times against a burner:
+
+```bash
+yes > /dev/null & B=$!; sleep 1
+for i in 1 2 3; do
+    sudo PWW_PID=$B PWW_PROBE=true PWW_SPIN_STRIKES=2 PWW_SPIN_THRESHOLD=0.2 \
+         PWW_MIN_UPTIME=0 PWW_NO_GDB=1 PWW_STATE_DIR=/tmp/pww-spintest \
+         PWW_AUTO_KILL_FLAG=/nonexistent /usr/local/bin/plasmashell-wedge-watch.sh
+    sleep 3
+done; kill $B
+sudo grep -E 'reason|spin_strikes' /tmp/pww-spintest/*.txt
+# expect by run 3: reason: CPU burn ~1.00 of one core for 2 consecutive samples
+```
+
+Both failure paths were run this way on 2026-10-14, and the healthy path was confirmed
+silent against the live panel.
 
 ## What a capture contains
 
@@ -85,6 +115,12 @@ sudo pacman -Syu plasma-workspace-debug qt6-base-debug qt6-wayland-debug
 ```
 
 ## Auto-kill (opt-in, off by default)
+
+**Enabled on 2026-10-14** (`/etc/plasmashell-wedge-watch.autokill` exists). The trigger for
+enabling it: a capture now exists for the failure that motivated the watchdog, the probe is
+confirmed never to fire on a healthy panel (no `plasmashell-wedge-watch` journal lines in
+the days before), and the alternative — a frozen panel that ends in a power-button hold —
+cost dirty filesystems. Capture always precedes the kill, so the evidence is kept.
 
 ```bash
 sudo touch /etc/plasmashell-wedge-watch.autokill     # enable

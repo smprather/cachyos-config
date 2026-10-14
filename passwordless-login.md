@@ -351,17 +351,22 @@ against the cached packages and the pacman database:
 
 ### Update guard (pacman hook)
 
-`/etc/pacman.d/hooks/95-keyring-pam-guard.hook` (to be installed) runs
+`/etc/pacman.d/hooks/95-keyring-pam-guard.hook` — **not installed as of 2026-10-14**
+(verified: no `95-keyring-pam-guard.hook` under `/etc/pacman.d/hooks/`) — runs
 `tests/check-keyring-state.sh --static --quiet` after any transaction touching
 `greetd`, `greetd-*`, `noctalia-greeter`, `gnome-keyring`, `pambase`, `sddm`, or
 `gdm`. It is read-only, silent on success, and prints a full report on stderr if
 the keyring has been re-encrypted or a keyring PAM line came back.
 
-Install:
+Install: the hook has to be written from the description above first. The path this section
+used to install from, `~/.hermes/cache/scratch/95-keyring-pam-guard.hook`, **no longer
+exists** — it was already absent when checked on 2026-10-14, and the whole `~/.hermes` tree
+went with the Hermes removal the same day (see `customizations.md`). Nothing else in the repo
+holds a copy, so treat the hook body as lost and recreate it from the paragraphs above.
 
 ```bash
 sudo install -o root -g root -m 644 \
-  ~/.hermes/cache/scratch/95-keyring-pam-guard.hook \
+  <recreated-hook-file> \
   /etc/pacman.d/hooks/95-keyring-pam-guard.hook
 ```
 

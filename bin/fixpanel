@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# fixpanel — bring the Plasma panel (taskbar) back when it freezes or stops drawing.
+#
+# Written 2026-10-14 after plasmashell's main thread was found pinned at ~100% of a core
+# in Qt's EGL fallback-surface retry (libnvidia-eglcore.so.615.78.08), entered from
+# processExposeEvent. The panel was unusable while the rest of the session was fine, so a
+# power-button hold — the wrong answer, and what dirtied /boot and forced a BTRFS tree-log
+# replay that morning — is never needed for this.
+#
+# Open applications, windows and terminals are NOT affected: only the shell restarts.
+# Cost: the panel disappears for a few seconds and comes back.
+#
+# Source of truth for this script is the repo at bin/fixpanel, symlinked into
+# ~/.local/bin. See plasmashell-wedge.md (both failure modes) and
+# plasmashell-watch/README.md (the automatic version of this, which needs no command).
+set -u
+
+echo "restarting the Plasma shell (panel)…"
+# SIGKILL rather than the unit's default SIGTERM: plasmashell handles SIGTERM through the
+# Qt event loop, so a shell that is stuck mid-frame takes systemd's full TimeoutSec=40sec.
+# The unit's Restart=on-failure brings it straight back.
+systemctl --user kill -s KILL plasma-plasmashell.service 2>/dev/null
+systemctl --user start plasma-plasmashell.service
+
+for _ in $(seq 1 40); do
+    p="$(pgrep -x plasmashell | head -1)"
+    if [ -n "$p" ]; then
+        age="$(ps -o etimes= -p "$p" --no-headers 2>/dev/null | tr -d ' ')"
+        if [ -n "$age" ] && [ "$age" -lt 30 ]; then
+            bus="$(tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null \
+                   | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p' | head -1)"
+            if [ -n "$bus" ] && timeout 3 busctl --address="$bus" call \
+                   org.kde.plasmashell / org.freedesktop.DBus.Peer Ping >/dev/null 2>&1; then
+                echo "panel is back (pid $p)."
+                exit 0
+            fi
+        fi
+    fi
+    sleep 0.25
+done
+
+echo "panel did not come back within 10s — check:" >&2
+echo "  systemctl --user status plasma-plasmashell.service" >&2
+echo "  journalctl --user -u plasma-plasmashell.service -n 30" >&2
+exit 1

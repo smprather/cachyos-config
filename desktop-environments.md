@@ -46,7 +46,9 @@ functionally significant ones:
 | `bluedevil` | Bluetooth |
 | `kinfocenter`, `spectacle`, `drkonqi`, `discover`, `print-manager` | system info, screenshots, crash handling, software centre, printing |
 
-KDE applications (`konsole`, `kate`, `gwenview`, `okular`) were also absent.
+KDE applications (`konsole`, `kate`, `gwenview`, `okular`) were also absent. As of
+2026-10-11, `gwenview`, `okular` and `konsole` are installed (konsole on that date, per
+`customizations.md`); **`kate` is still not installed**.
 
 ## Fix
 
@@ -355,16 +357,25 @@ qdbus6 org.plasmazones /PlasmaZones \
 ```
 
 If either screen query is empty and KWin reports a `Placeholder-1` output, do
-not rewrite layouts or rules. The current KVM disconnects HDMI-A-1 when it
-switches the monitor to another computer, so this state is expected hardware
-behavior rather than a PlasmaZones failure. PlasmaZones has no real screen
-context to which it can apply assignments until the KVM returns the display.
+not rewrite layouts or rules. Measured on 2026-10-14, the KVM **in use now** has working
+EDID emulation: across a real switch, `/sys/class/drm/card1-HDMI-A-1/status` stayed
+`connected` at 1 Hz for 97 s with an unchanged EDID hash and zero `Placeholder-1` events,
+while the KVM's USB emulated devices re-attached exactly as they should. The earlier
+non-emulating KVM — and the caveat that used to live here — is gone. See the note at the
+end of this section.
 
-The planned replacement KVM has EDID emulation. It should keep the display's
-identity and mode visible to the active computer while the video path is
-switched, avoiding most output removal/re-add events and preserving KWin's
-screen context. After installation, verify that a KVM switch no longer makes
-`getScreenStates` empty before removing this diagnostic caveat.
+The replacement KVM with EDID emulation is **installed and verified** (2026-10-14), so this
+caveat is closed. Its HDMI output is the one in use ("Monitor B"; the DP cable for Monitor A
+is still missing after a house move, and is no longer needed for this). What that output
+*advertises*, though, is broader than the panel: `3840x2160@60` and `2560x1440@120` appear
+alongside the native `3440x1440@59.97`, which is the signature of a KVM-supplied EDID cloned
+from the real Dell identity. The preferred mode is still `3440x1440@59.97`, so KDE picks
+correctly — but if the display ever comes up black after a re-plug, force that mode with
+`kscreen-doctor output.HDMI-A-1.mode.1` before suspecting anything else.
+
+Consequence for diagnosis: a `Placeholder-1` event is no longer expected KVM behaviour. It
+now means something *else* dropped the link (cable, monitor input, or the GPU), and the
+`plasmashell-wedge.md` freeze of 2026-10-14 was therefore **not** a KVM artifact.
 
 PlasmaZones 3.4.12 does have hotplug recovery: it removes overlay surfaces for
 a removed output, recreates them when the output returns, and its KWin effect

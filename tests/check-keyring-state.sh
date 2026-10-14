@@ -183,14 +183,14 @@ if [[ "$STATIC" == "0" ]]; then
     else
         prompters_before="$(pgrep -x gcr-prompter | wc -l)"
         if printf 'keyring-check-value' | timeout 15 secret-tool store \
-               --label 'keyring state check' hermes-check state >/dev/null 2>&1; then
-            got="$(timeout 15 secret-tool lookup hermes-check state 2>/dev/null || true)"
+               --label 'keyring state check' keyring-state-check state >/dev/null 2>&1; then
+            got="$(timeout 15 secret-tool lookup keyring-state-check state 2>/dev/null || true)"
             if [[ "$got" == "keyring-check-value" ]]; then
                 pass "secret-tool store/lookup round-trip OK"
             else
                 bad "secret-tool lookup returned '$got' (expected 'keyring-check-value')"
             fi
-            timeout 15 secret-tool clear hermes-check state >/dev/null 2>&1 || true
+            timeout 15 secret-tool clear keyring-state-check state >/dev/null 2>&1 || true
         else
             bad "secret-tool store failed (daemon down, or keyring locked)"
         fi

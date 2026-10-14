@@ -1,0 +1,199 @@
+[New LWP 18560 (id 2)]
+[New LWP 18556 (id 3)]
+[New LWP 18553 (id 4)]
+[New LWP 18552 (id 5)]
+[New LWP 18551 (id 6)]
+[New LWP 18549 (id 7)]
+[New LWP 18536 (id 8)]
+[New LWP 18516 (id 9)]
+[New LWP 18514 (id 10)]
+[New LWP 18507 (id 11)]
+[New LWP 18497 (id 12)]
+[New LWP 18496 (id 13)]
+[New LWP 18495 (id 14)]
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libpthread.so.0.debug" does not match "/usr/lib/libpthread.so.0" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libpthread.so.0.debug" does not match "/usr/lib/libpthread.so.0" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libm.so.6.debug" does not match "/usr/lib/libm.so.6" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libm.so.6.debug" does not match "/usr/lib/libm.so.6" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libc.so.6.debug" does not match "/usr/lib/libc.so.6" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libc.so.6.debug" does not match "/usr/lib/libc.so.6" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/ld-linux-x86-64.so.2.debug" does not match "/lib64/ld-linux-x86-64.so.2" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libresolv.so.2.debug" does not match "/usr/lib/libresolv.so.2" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libresolv.so.2.debug" does not match "/usr/lib/libresolv.so.2" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libmvec.so.1.debug" does not match "/usr/lib/libmvec.so.1" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libmvec.so.1.debug" does not match "/usr/lib/libmvec.so.1" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/librt.so.1.debug" does not match "/usr/lib/librt.so.1" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/librt.so.1.debug" does not match "/usr/lib/librt.so.1" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libdl.so.2.debug" does not match "/usr/lib/libdl.so.2" (CRC mismatch).
+
+warning: the debug information found in "/usr/lib/debug/usr/lib/libdl.so.2.debug" does not match "/usr/lib/libdl.so.2" (CRC mismatch).
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[Switching to thread 1 (Thread 0x7f24536a4100 (LWP 18494))]
+0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+
+Thread 14 (Thread 0x7f24531ff6c0 (LWP 18495) "QDBusConnection"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007f24588d5490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007f24588d5592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007f245a518ceb in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#5  0x00007f245a1a7e24 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#6  0x00007f245a2f2e1e in QThread::exec() () from /usr/lib/libQt6Core.so.6
+#7  0x00007f245b2d4d99 in ?? () from /usr/lib/libQt6DBus.so.6
+#8  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#9  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#10 0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 13 (Thread 0x7f24525ff6c0 (LWP 18496) "WaylandEventThr"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007f245b3dbdea in ?? () from /usr/lib/libQt6WaylandClient.so.6
+#3  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#4  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 12 (Thread 0x7f2451dfe6c0 (LWP 18497) "WaylandEventThr"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007f245b3dbdea in ?? () from /usr/lib/libQt6WaylandClient.so.6
+#3  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#4  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 11 (Thread 0x7f242b0906c0 (LWP 18507) "QQmlThread"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007f24588d5490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007f24588d5592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007f245a518ceb in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#5  0x00007f245a1a7e24 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#6  0x00007f245a2f2e1e in QThread::exec() () from /usr/lib/libQt6Core.so.6
+#7  0x00007f245a3b4dd5 in ?? () from /usr/lib/libQt6Core.so.6
+#8  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 10 (Thread 0x7f2422ba06c0 (LWP 18514) "QSGRenderThread"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f24598a908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007f24598abc70 in pthread_cond_wait () from /usr/lib/libc.so.6
+#3  0x00007f245a3bbc90 in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /usr/lib/libQt6Core.so.6
+#4  0x00007f245c0c18d6 in ?? () from /usr/lib/libQt6Quick.so.6
+#5  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#6  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 9 (Thread 0x7f242190a6c0 (LWP 18516) "CPMMListener"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007f2440580967 in ?? () from /usr/lib/libnvidia-eglcore.so.615.78.08
+#3  0x00007f244057edca in ?? () from /usr/lib/libnvidia-eglcore.so.615.78.08
+#4  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 8 (Thread 0x7f24139396c0 (LWP 18536) "QThread"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007f2459f9187f in ?? () from /usr/lib/libKF6GuiAddons.so.6
+#3  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#4  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 7 (Thread 0x7f23f67fc6c0 (LWP 18549) "threaded-ml"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007f2412e938a7 in ?? () from /usr/lib/libpulse.so.0
+#3  0x00007f2412e7c3f9 in pa_mainloop_poll () from /usr/lib/libpulse.so.0
+#4  0x00007f2412e876be in pa_mainloop_iterate () from /usr/lib/libpulse.so.0
+#5  0x00007f2412e87781 in pa_mainloop_run () from /usr/lib/libpulse.so.0
+#6  0x00007f2412e98b6d in ?? () from /usr/lib/libpulse.so.0
+#7  0x00007f2412e2f506 in ?? () from /usr/lib/pulseaudio/libpulsecommon-17.0.so
+#8  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 6 (Thread 0x7f23cf9ff6c0 (LWP 18551) "KCupsConnection"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007f24588d5490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007f24588d5592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007f245a518ceb in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#5  0x00007f245a1a7e24 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#6  0x00007f245a2f2e1e in QThread::exec() () from /usr/lib/libQt6Core.so.6
+#7  0x00007f240e96ba16 in KCupsConnection::run() () from /usr/lib/libkcups.so
+#8  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#9  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#10 0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 5 (Thread 0x7f23cf1fe6c0 (LWP 18552) "KIO::WorkerThre"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f24598a908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007f24598abc70 in pthread_cond_wait () from /usr/lib/libc.so.6
+#3  0x00007f245a3bbc90 in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /usr/lib/libQt6Core.so.6
+#4  0x00007f2459284a25 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#5  0x00007f24592d3169 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#6  0x00007f2459396bb6 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#7  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#8  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 4 (Thread 0x7f23ce2ad6c0 (LWP 18553) "QSGRenderThread"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f24598a908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007f24598abc70 in pthread_cond_wait () from /usr/lib/libc.so.6
+#3  0x00007f245a3bbc90 in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /usr/lib/libQt6Core.so.6
+#4  0x00007f245c0c18d6 in ?? () from /usr/lib/libQt6Quick.so.6
+#5  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#6  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 3 (Thread 0x7f23cceab6c0 (LWP 18556) "KIO::WorkerThre"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f24598a908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007f24598abc70 in pthread_cond_wait () from /usr/lib/libc.so.6
+#3  0x00007f245a3bbc90 in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /usr/lib/libQt6Core.so.6
+#4  0x00007f2459284a25 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#5  0x00007f24592d3169 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#6  0x00007f2459396bb6 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#7  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#8  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 2 (Thread 0x7f23bbfff6c0 (LWP 18560) "KIO::WorkerThre"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f24598a908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007f24598abc70 in pthread_cond_wait () from /usr/lib/libc.so.6
+#3  0x00007f245a3bbc90 in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /usr/lib/libQt6Core.so.6
+#4  0x00007f2459284a25 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#5  0x00007f24592d3169 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#6  0x00007f2459396bb6 in ?? () from /usr/lib/libKF6KIOCore.so.6
+#7  0x00007f245a3b4d19 in ?? () from /usr/lib/libQt6Core.so.6
+#8  0x00007f24598ac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007f245994eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 1 (Thread 0x7f24536a4100 (LWP 18494) "plasmashell"):
+#0  0x00007f24598b5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007f245993e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007f24588d5490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007f24588d5592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007f245a518ceb in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#5  0x00007f245a1a7e24 in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /usr/lib/libQt6Core.so.6
+#6  0x00007f245a19ebe4 in QCoreApplication::exec() () from /usr/lib/libQt6Core.so.6
+#7  0x0000563d178f77c2 in ?? ()
+#8  0x00007f2459827d0e in ?? () from /usr/lib/libc.so.6
+#9  0x00007f2459827e4b in __libc_start_main () from /usr/lib/libc.so.6
+#10 0x0000563d178f7ff5 in ?? ()
+[Inferior 1 (process 18494) detached]

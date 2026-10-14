@@ -1,0 +1,32 @@
+=== date
+Wed Oct 14 09:09:13 AM CDT 2026
+=== /proc/1527/status
+State:	R (running)
+VmRSS:	  602492 kB
+VmSwap:	       0 kB
+Threads:	42
+voluntary_ctxt_switches:	33910
+nonvoluntary_ctxt_switches:	31929
+=== ps
+    PID ELAPSED STAT %CPU   RSS COMMAND
+   1527    2469 R<sl 39.9 602492 plasmashell
+=== per-thread CPU
+    TID STAT %CPU WCHAN                  COMMAND
+   1527 R<sl 39.9 -                      plasmashell
+top - 09:09:13 up 41 min,  1 user,  load average: 1.18, 1.16, 0.85
+Threads: 42 total, 1 running, 41 sleep, 0 d-sleep, 0 stopped, 0 zombie
+%Cpu(s):  4.3 us,  0.0 sy,  0.0 ni, 95.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem :  32001.2 total,  18741.3 free,   7314.8 used,   6855.6 buff/cache     
+MiB Swap:  32001.0 total,  31997.3 free,      3.7 used.  24686.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+   1527 mylesp    14  -6 3138292 602492 331712 R  99.1   1.8  16:10.14 plasmas+
+   1583 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.55 QDBusCo+
+   1603 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.18 Wayland+
+   1604 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.15 Wayland+
+   1697 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.25 QQmlThr+
+   1721 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:12.01 QSGRend+
+   1733 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.02 CPMMLis+
+   1935 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.13 QThread
+   1950 mylesp    14  -6 3138292 602492 331712 S   0.0   1.8   0:00.00 threade+
+gdb_rc=0
