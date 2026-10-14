@@ -17,6 +17,11 @@ or changing the system without repeating old diagnostics.
 
 ## Read These First
 
+> **Rebuilding the machine** — for example the fresh install onto the new NVMe — read
+> `fresh-install-checklist.md` first: it is the ordered route, and it lists the artifacts that
+> no package can restore. `frozen-system-recovery.md` is the ladder for when a running system
+> freezes (panel → VT3 rescue shell → power button → limine snapshot).
+
 Start here before changing the machine:
 
 1. `README.md` for the repo map and provenance.

@@ -1,5 +1,13 @@
 # Migrating this OS to a new NVMe — plan and runbook
 
+**2026-10-14 update: the drive has arrived, and the chosen route is a fresh CachyOS install onto
+it rather than the `btrfs send`/`receive` clone described below.** Two consequences to carry into
+the work: the route is governed by [fresh-install-checklist.md](fresh-install-checklist.md) plus
+the inventory diff further down, and — correction 3 — **the boot-menu rollback net does not
+survive a fresh install**, so the old disk must stay installed and bootable until the new one has
+booted a few times. The slot choreography and the identify-disks-by-PARTUUID rule below still
+apply unchanged.
+
 **Status: plan only. Nothing here has been executed.** Written 2026-10-06 while choosing a
 disk; a drive was ordered the same day and execution is deferred to a later date. Nothing
 below has been started, and nothing needs to be until the drive arrives. The hardware facts it rests on are in [hardware-check.md](hardware-check.md) and
