@@ -4276,6 +4276,35 @@ Also corrected: the earlier "0 pending updates" reading came from the stale loca
 `checkupdates` against fresh repo data reports **35** upgradable packages (no driver among
 them).
 
+## 2026-10-14 (afternoon) — the full `-Syu`, immediately before the reboot
+
+    sudo pacman -Syu --noconfirm
+    # undo: sudo snapper -c root undochange 183..184   (or boot snapshot 183 from the limine menu)
+
+snapper pre **183**, post **184**. 570.15 MiB downloaded, 1 771.71 MiB installed, 35 packages,
+and `checkupdates` now reports 0 upgradable. **No kernel, driver, systemd, glibc, Plasma, kwin
+or qt6 package was in it** — so the running session was never in a mixed state, and the NVIDIA
+pairing is unchanged (`nvidia-utils` 615.78.08-2, `linux-cachyos` 7.2.9-2,
+`linux-cachyos-nvidia-open` 7.2.9-2). Notable upgrades: `chromium` 154.0.8037.97,
+`google-chrome` 155.0.8059.79, `python` 3.14.8, `kirigami` 6.31.0, `ccache` 4.14.1, and
+`limine` 12.9.0 → **12.9.3**, which re-deployed `/boot/EFI/limine/limine_x64.efi` (backup left
+at `limine_x64.bak`) and added the new snapshot pair to the menu.
+
+Two log oddities, both benign, recorded so they are not re-investigated:
+
+- `core-debug.db` 404 from every Arch mirror — the pre-existing debug-repo gap already
+  documented in the konsole entry above. Not new.
+- `luajit-…-x86_64_v3.pkg.tar.zst` 404 from `cdn77.cachyos.org` once; pacman retried a
+  different mirror and installed it. Verified: installed version == repo version, and the
+  transaction has no `failed to commit` or conflict lines at all.
+
+Verified afterwards: `checkupdates | wc -l` = 0; limine entries 166 → **172** and snapshot
+entries 106 → **110** (the new pre/post pair joined the menu); the live entries still read
+`quiet splash` with `nowatchdog` absent (0 occurrences outside snapshot entries); no new
+`*.pacnew`; `systemctl --failed` still only `mdmonitor`; the shell's drop-in intact
+(`libnvidia-eglcore` absent from plasmashell's maps); `plasmashell-wedge-watch.timer` active;
+`/` at 88 % with 29 G free. Full log: `/tmp/pacman-syu-20261014.log`.
+
 Machine changes outside this repo, for the record: `/etc/plasmashell-wedge-watch.autokill`
 (autokill enabled), `/etc/sysctl.d/99-recovery.conf`, the VT3 getty drop-in, and the limine
 cmdline edit — each with its undo above or in `frozen-system-recovery.md`. Hermes was removed
