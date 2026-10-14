@@ -72,10 +72,13 @@ Verified facts, so no time is wasted:
 - **A hard hang now reboots itself** (from 2026-10-14). `nowatchdog` was removed from
   `/etc/default/limine` and `limine.conf` was regenerated, so the lockup detector runs;
   with `/etc/sysctl.d/99-recovery.conf` (`kernel.panic=15`, `kernel.hardlockup_panic=1`) a
-  locked-up CPU panics and reboots in ~15 s instead of hanging forever. Verify after a
-  reboot: `/proc/cmdline` reads `quiet splash …`, `/proc/sys/kernel/nmi_watchdog` is 1,
-  `hardlockup_panic` 1, `panic` 15. (Before this, `nmi_watchdog` was 0 and could not be
-  re-enabled at runtime — verified by writing 1 and reading 0 back.)
+  locked-up CPU panics and reboots in ~15 s instead of hanging forever.
+  The detector needed a second override: **CachyOS ships `kernel.nmi_watchdog = 0`** in
+  `/usr/lib/sysctl.d/70-cachyos-settings.conf`, so `hardlockup_panic` had nothing behind it
+  until that was overridden too. Verified after the 2026-10-14 reboot: `/proc/cmdline` reads
+  `quiet splash …`, and `nmi_watchdog` / `hardlockup_panic` / `panic` read 1 / 1 / 15, with
+  `NMI watchdog: Enabled` in dmesg. Cost: one hardware PMU counter (CachyOS's reason for the
+  default); delete the `kernel.nmi_watchdog = 1` line to go back.
 - Therefore: **hold the power button ~10 s.** Safe here, and each claim is measured rather
   than assumed:
   - root, `/home`, `/root`, `/srv`, `/var/cache`, `/var/tmp` are btrfs subvolumes with
@@ -110,7 +113,8 @@ substitutes for that stick — keep one.
 | Thing | State | Undo |
 |---|---|---|
 | `getty@tty3` autologin rescue shell | active + enabled, shell verified on tty3 | `sudo rm -rf /etc/systemd/system/getty@tty3.service.d && sudo systemctl daemon-reload && sudo systemctl disable --now getty@tty3` |
-| `/etc/sysctl.d/99-recovery.conf` (`panic=15`, `hardlockup_panic=1`) + `nowatchdog` removed from the cmdline | applied 2026-10-14; takes effect on the next boot — check `nmi_watchdog`=1 afterwards | `sudo rm /etc/sysctl.d/99-recovery.conf && sudo sysctl --system`, and restore `/etc/default/limine.bak-20261014` + re-run `limine-update` |
+| `/etc/sysctl.d/99-recovery.conf` + `nowatchdog` removed from the cmdline | applied and **verified after the 2026-10-14 reboot**: `nmi_watchdog`=1, `hardlockup_panic`=1, `panic`=15 | `sudo rm /etc/sysctl.d/99-recovery.conf && sudo sysctl --system`, and restore `/etc/default/limine.bak-20261014` + re-run `limine-update` |
+| Device names | **not stable**: across the 2026-10-14 reboot the root moved from `/dev/nvme0n1p2` to `/dev/nvme1n1p2` (same UUID `6ed46d55-…`, same filesystem). `fstab` has 0 device-name entries and `limine.conf` uses `root=UUID=` throughout, so nothing breaks — but never type an `nvmeX`/`sdX` name from memory, and read `hardware-check.md`'s storage map as a per-boot snapshot | n/a |
 | REISUB | unavailable: `sysrq=16` plus keyd's `print = f13`, which **is** the PrintScreen→capture bridge — do not remove it | use `echo s`, `echo b > /proc/sysrq-trigger` from the VT3 shell instead |
 | `sshd` | disabled, nothing listening on 22 | — |
 | limine snapshot entries | 53 bootable, `limine-snapper-sync` enabled | — |

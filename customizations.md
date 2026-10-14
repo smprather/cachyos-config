@@ -4305,6 +4305,50 @@ entries 106 → **110** (the new pre/post pair joined the menu); the live entrie
 (`libnvidia-eglcore` absent from plasmashell's maps); `plasmashell-wedge-watch.timer` active;
 `/` at 88 % with 29 G free. Full log: `/tmp/pacman-syu-20261014.log`.
 
+## 2026-10-14 (post-reboot) — verification, and the detector's missing half
+
+The reboot landed at 12:17:19 after a **clean** shutdown (full unmount sequence at 12:16:58),
+and the boot was clean too: no `Dirty bit`, no `BTRFS … tree-log replay`. Verified working:
+
+- the new cmdline is live — `quiet splash rw rootflags=subvol=/@ …`, `nowatchdog` gone;
+- the panel is contained **after a real boot**: `plasmashell` maps no `libnvidia-eglcore`
+  (Mesa `libEGL_mesa` + `libgallium` instead), probe answers, panel renders (screenshot
+  checked), CPU 6.4 % during startup and settling;
+- the VT3 rescue shell came back on its own: `mylesp -bash` on tty3;
+- `plasmashell-wedge-watch.timer` active with the autokill flag present, and
+  `nvidia-driver-watch.timer` armed (next Monday);
+- 0 NVRM assertion lines, 0 failed user units, `mdmonitor` still the only failed system unit;
+  kernel/driver pairing unchanged (7.2.9-2 / 615.78.08-2).
+
+**One gap found and closed.** `kernel.nmi_watchdog` was still 0 after the reboot, so
+`hardlockup_panic` had no detector behind it. Cause: **CachyOS ships
+`kernel.nmi_watchdog = 0`** in `/usr/lib/sysctl.d/70-cachyos-settings.conf` — the `nowatchdog`
+cmdline was only ever half the story. The detector works here (a runtime write to
+`/proc/sys/kernel/nmi_watchdog` flips it and the kernel logs `NMI watchdog: Enabled`), so the
+override was appended to `/etc/sysctl.d/99-recovery.conf`:
+
+    echo 'kernel.nmi_watchdog = 1' | sudo tee -a /etc/sysctl.d/99-recovery.conf
+    sudo sysctl --system
+    # verified: nmi_watchdog=1 hardlockup_panic=1 panic=15 watchdog=1, and dmesg shows the
+    # "NMI watchdog: Enabled. Permanently consumes one hw-PMU counter." line
+    # undo: delete that line from the file and re-run `sudo sysctl --system`
+
+Cost is one hardware PMU counter — CachyOS's reason for the default — which buys a hard-locked
+CPU panicking and rebooting itself in ~15 s.
+
+Two observations, both benign, recorded so they are not chased later:
+
+- `kwin_wayland` logs `Invalid framebuffer status: "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT"` a
+  few times per boot (5 this boot). **Chronic, not new**: 3 of the 8 occurrences in the whole
+  retained journal belong to the *previous* boot, i.e. it pre-dates both the containment and
+  the 2026-10-14 update. The compositor renders correctly; leave it alone.
+- **Device enumeration order changed across this reboot**: the root filesystem moved from
+  `/dev/nvme0n1p2` to `/dev/nvme1n1p2` with the same UUID (`6ed46d55-…`), and `/boot` from
+  `nvme0n1p1` to `nvme1n1p1` (`B26C-249B`). Nothing breaks because `fstab` carries 9 `UUID=`
+  entries and zero device-name entries, and `limine.conf` spells `root=UUID=` 112 times — but
+  device names on this box are a per-boot snapshot, so `hardware-check.md`'s `nvmeX` labels
+  must not be typed from memory (and a future `hardware-check.sh` run could print UUIDs).
+
 Machine changes outside this repo, for the record: `/etc/plasmashell-wedge-watch.autokill`
 (autokill enabled), `/etc/sysctl.d/99-recovery.conf`, the VT3 getty drop-in, and the limine
 cmdline edit — each with its undo above or in `frozen-system-recovery.md`. Hermes was removed
