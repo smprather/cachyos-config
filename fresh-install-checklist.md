@@ -29,6 +29,39 @@ The benchmark is the same idea for performance, and it has the same one-shot pro
 before-baseline **now**, while the old install is still the one booting, or the comparison is gone
 for good (`benchmarks/README.md`, `storage-migration.md`).
 
+## 0a. The live medium
+
+**The stick is the PNY "USB 3.0 FD", serial `070B66D983812136`, 29.6 GB**, written 2026-10-17 from
+`cachyos-desktop-linux-260809.iso`
+
+| Property | Value |
+|---|---|
+| ISO sha256 | `959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c` (3041 MiB, published hash, matched) |
+| written with | `sudo dd if=<iso> of=/dev/sdc bs=4M oflag=sync conv=fsync` |
+| verified by | reading the first 3041 MiB back off the stick and comparing sha256 — **identical** |
+| layout | `sdc1` iso9660 `COS_202608` 2.9 G · `sdc2` vfat `ARCHISO_EFI` 23 M with `BOOTx64.EFI` + `BOOTIA32.EFI` |
+
+Before it was overwritten the stick was the board's **BIOS-flash stick**: one file
+`B550AORUSELITEAXV212.FId` (16 MiB, the current `FId` firmware) on FAT32 labelled `BIOSFLASH`, no
+`EFI/` directory and no ISO — which is exactly why the firmware answered "insert boot media and press a
+key" when it was tried as a live medium. That image was preserved first, so a BIOS stick can be remade
+at any time:
+
+```text
+~/Documents/board-firmware/B550AORUSELITEAXV212.FId
+sha256 334dc14d462efa5ccb33afaec0f030584cbda07356789af2e7cc7d8f7f80b267
+```
+
+Boot it from the firmware's boot menu (Gigabyte: `F12`) and pick the **UEFI** entry for the stick.
+Secure Boot is off, so nothing needs signing. The stick sits on a **direct** xHCI port (bus 4, port 1),
+not behind the dock's hub — if the firmware still refuses it, try a rear USB 2.0 port rather than the
+front-panel or dock ports, because the dock's hub chain is a known source of enumeration oddity here.
+
+**The target drive is already fitted and empty:** the 9100 PRO is in the **CPU slot**
+(`0000:01:00.0`, `LnkCap 32GT/s`, `LnkSta 16GT/s ×4` — i.e. Gen5 trained down to Gen4, which is the
+acceptance test `storage-migration.md` asks for), with no partitions. The Intel 600p (this install) is
+in the chipset slot at 8GT/s and stays bootable as the fallback.
+
 ## 1. Install
 
 - **CachyOS Plasma edition**, not the Hyprland edition with desktops layered on top. The
