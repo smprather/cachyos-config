@@ -100,9 +100,11 @@ Three things in this home that are easy to misjudge:
 - **The browser profiles are gone as of 2026-10-17**, deliberately, before this copy: the three
   Chrome-family profiles (`~/.config/google-chrome` 6.4 G, `-canary` 6.1 G, `chromium` 394 M) and their
   caches were wiped (19 GB in total), so the copy no longer carries them — which also removes the only
-  reason to consider excluding `Cache/`-style subdirectories. The undo is a btrfs snapshot of `@home`,
-  so the space is still allocated until that is dropped; see `customizations.md`, 2026-10-17 (late).
-  Firefox's own profile (580 M) was left in place.
+  reason to consider excluding `Cache/`-style subdirectories. Firefox followed the same evening
+  (`~/.config/mozilla` + `~/.mozilla` + an 8 K flatpak leftover), so **no browser profile comes over at
+  all**. The undo is a btrfs snapshot of `@home`, verified to contain every deleted path, so the space
+  stays allocated until that is dropped; see `customizations.md`, 2026-10-17 (late). Just over 19 GB in
+  total, which is why this copy is ~19 GB smaller than the 150 GB first measured.
 - **Session-restore state travels**: `~/.config/session/` (a Dolphin entry from 2026-10-15, a KWin
   entry from 2026-09-10) and `ksmserverrc`. The new system's first login may therefore try to reopen
   what was open here. Clearing `~/.config/session/` after the mirror, or setting the login mode to an

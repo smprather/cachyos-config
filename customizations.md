@@ -4637,3 +4637,20 @@ deliberate decision rather than happening by accident during cleanup.
 
 Firefox's *profile* was left alone (`~/.config/mozilla` 197 M + `~/.mozilla` 383 M): different browser,
 not asked for. Its cache is gone, which costs nothing.
+
+**Superseded the same evening — Firefox went too.** Owner's call: `~/.config/mozilla` (197 M),
+`~/.mozilla` (383 M) and an 8 K flatpak leftover (`~/.var/app/org.mozilla.firefox`) were removed. No
+new snapshot was needed — the 15:14 wipe snapshot predates every deletion and was verified to contain
+both directories, so the undo above covers Firefox as well. Two things the guards taught:
+
+- **Firefox's `profiles.ini` lives in `~/.mozilla/firefox/`, not `~/.mozilla/`.** The first attempt
+  aborted on a guard that looked one level too high, which is the guard doing its job: it refused to
+  delete on an unverified assumption instead of proceeding to a plausible-looking `rm -rf`.
+- **This Firefox kept profiles in two layouts at once** — `~/.mozilla/firefox/` with three configured
+  profiles (`dkm81izg.default-default`, `laq8ki8k.default-release`, `rp9iwlr.default`) and
+  `~/.config/mozilla/firefox/50qj6v0q.default`. Removing only the classic directory would have left a
+  live-looking profile behind; the same asymmetry matters if a profile is ever restored from the
+  snapshot, so restore *both* paths or neither.
+
+`$HOME` stays at 131 G to the rounded `du` (580 M does not move it) and `df /home` still reports 208 G
+used / 25 G free: the space, Firefox's included, remains allocated until the snapshot is dropped.
