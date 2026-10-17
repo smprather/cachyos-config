@@ -4749,6 +4749,46 @@ after-benchmark (`scripts/system-benchmark.sh after` ×3 → `--average` → `--
 `benchmarks/2026-10-17-before-avg.txt`); `scripts/premigration-inventory.sh` plus its diff; and the old
 disk's leftover `/.snapshots` and boot-capture units.
 
+## 2026-10-17 (late night) — the after-benchmark: what the rebuild actually bought
+
+Three runs of `scripts/system-benchmark.sh after`, averaged, and diffed against the six-run
+before-baseline. Packages the suite needed here — the loadout is deliberately **not** installed on this
+system, so these are system packages:
+
+    sudo pacman -Syu --noconfirm sysbench vkmark     # snapper pre 11 / post 12
+    sudo pacman -Syu --noconfirm fio                 # snapper pre 13 / post 14  -> /usr/bin/fio 3.42,
+                                                     #  matching the before-runs; the loadout copy would
+                                                     #  not be visible to the suite's root-run fio jobs
+    sudo pacman -Syu --noconfirm github-cli          # snapper pre 9 / post 10  (the git credential helper)
+
+The disk is the win, and it is unambiguous on the **raw** jobs — those measure the drive, not how full
+the filesystem is (before-runs at 89-90 % full, after-runs at 2 %):
+
+    raw_seq_read_1m         818 -> 4449 MiB/s    +447 %
+    raw_rand_read_4k_qd1    26.9 -> 57.1 MiB/s   +112 %   (6,888 -> 14,600 IOPS)
+    file_seq_read_1m        977 -> 3043 MiB/s    +211 %
+    file_seq_write_1m       584 -> 3095 MiB/s    +430 %
+    file_rand_read_4k_qd1   33.4 -> 87.2 MiB/s   +161 %
+    file_rand_write_4k_qd32 41.9 -> 107.7 MiB/s  +157 %
+
+Compute is unchanged, as it must be — same CPU, GPU and driver: cpu 1t +0.2 %, cpu 24t -0.7 %, memory
+-0.9 %/-2.1 %, sha256 -0.2 %, aes-gcm -0.9 %, vkmark score +0.5 %. That is the useful negative result:
+nothing in the rebuild cost performance.
+
+Boot: **userspace 9.6 -> 6.8 s (-29 %)**, total 34.0 -> 36.4 s (+7 %). The OS half of boot got 2.8 s
+faster while the total rose, which is the firmware/loader noise the boot loop measured (the loader alone
+swings 2.2-6.3 s) — compare `userspace`, never the total.
+
+One number is not credible as hardware: `raw_rand_read_4k_qd32` came out **198.2 vs 198.3 MiB/s
+(0.1 %)** — identical on a 38,280-hour 600p and a Gen4 9100 PRO, which no drive physics supports. Treat
+it as a limit of the test (libaio queue depth / CPU per-IO cost), not a property of either disk, and do
+not quote it.
+
+Artifacts: `benchmarks/2026-10-17-after{,-run2,-run3}.txt` and `-after-avg.txt`.
+
+Still owed (recorded so it is not lost): a `standard-tools.md` row for `github-cli` and one for `keyd`,
+and an after-row in `benchmarks/README.md`'s table.
+
 ## 2026-10-17 (night) — the fresh install onto the 9100 PRO, and $HOME mirrored into it
 
 The migration happened. This entry's subject is now a **different machine from the one above** — a
