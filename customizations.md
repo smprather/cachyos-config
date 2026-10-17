@@ -4833,6 +4833,29 @@ cache holds no keyring copies, so it needs its own network bootstrap); `Markdown
 `plasma-meta` (the KDE app set is already installed: dolphin, konsole, kate, gwenview, okular, spectacle,
 filelight); the PlasmaZones decision (upstream v3.5.1, packaged build stale); `mdmonitor`.
 
+## 2026-10-17 (night, before the verification reboot) — a one-shot trigger so the agent survives it
+
+This reboot exists to verify what only a boot can prove (autologin, `nmi_watchdog`=1, the watchdog), and
+a reboot kills the session doing the verifying. So a **temporary** login trigger resumes pi on the next
+login: XDG autostart → `alacritty -e pi -c "$(cat ~/.pi/post-reboot-continue.txt)"`.
+
+It is one-shot **by construction**: the wrapper deletes its own autostart entry *before* exec'ing pi, so
+it cannot fire twice even if the cleanup is forgotten — which is the failure mode AGENTS.md contract #4
+exists for. It also survives the failure it guards against: XDG autostart runs on a manual login too, so
+if the autologin change does not work, logging in by hand still brings the agent back.
+
+    do:    ~/.local/bin/pi-continue-once            wrapper; removes the trigger, then execs pi
+           ~/.config/autostart/pi-continue.desktop  the trigger itself (self-deleting)
+           ~/.pi/post-reboot-continue.txt           self-contained instruction + checklist
+    undo:  rm -f those three files                   (the wrapper removes the .desktop on first run)
+
+The prompt file is deliberately self-contained — verify the reboot, remove the trigger, finish the
+software restore (chaotic-aur, MarkdownBlaze, PlasmaZones, mdmonitor), run the inventory diff, commit —
+because the resumed session may arrive post-compaction and must not depend on remembering this
+conversation. **It is not to be kept**: a login trigger that outlives its purpose is another `~/.local`
+shim with no lifecycle. Verified after the reboot: the `.desktop` is absent, and only the other two files
+need deleting.
+
 ## 2026-10-17 (night) — the fresh install onto the 9100 PRO, and $HOME mirrored into it
 
 The migration happened. This entry's subject is now a **different machine from the one above** — a
