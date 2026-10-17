@@ -4921,3 +4921,236 @@ Not yet done on the new system (the checklist's §2 table): the journal cap over
 VT3 autologin getty, the panel watchdog + its autokill flag, the KWin `fixpanel` shortcut, keyd, the
 greetd/noctalia config, and the boot-capture units (which live in `/etc` + `/usr/local` and therefore
 were **not** carried over by the home mirror).
+
+## 2026-10-17 (late) — post-rebuild verification, trigger removed, software restore finished
+
+Resumed automatically after the verification reboot by a one-shot autostart
+(`pi-continue-once`), which deleted its own `.desktop` before exec'ing. Nothing
+was touched by hand before this entry: the state below is what the rebuild booted
+into on its own.
+
+### 1. This reboot, verified
+
+| assertion | expected | measured |
+| --- | --- | --- |
+| `kernel.nmi_watchdog` | 1 | 1 |
+| `kernel.hardlockup_panic` | 1 | 1 |
+| `kernel.panic` | 15 | 15 |
+| `nowatchdog` on `/proc/cmdline` | 0 | 0 |
+| `libnvidia-eglcore` in plasmashell maps | 0 | 0 |
+| `plasmashell-wedge-watch.timer` | active | active + enabled |
+| `nvidia-driver-watch.timer` (user) | active | active |
+| `getty@tty3` rescue shell | active | active |
+| `systemctl --failed` (system / user) | 0 / 0 | 0 / 0 |
+
+Session: `XDG_CURRENT_DESKTOP=KDE`, `XDG_SESSION_TYPE=wayland`,
+`/usr/share/xsessions/` empty, `plasmashell 6.8.0` / `kwin 6.8.0`, kernel
+`7.2.9-2-cachyos`, booted `18:45:59`, machine-id `61c3877c…`. Autologin confirmed
+by reaching the desktop with no prompt — `/etc/plasmalogin.conf` `[Autologin]
+User=mylesp Session=plasma`, which is the *verified* test rather than restarting
+the DM.
+
+Disks: `nvme0n1` = Samsung **9100 PRO** 1TB at `0000:01:00.0`, `LnkSta 16GT/s ×4`
+(the Gen4 ceiling this board's CPU slot advertises — the "(downgraded)" flag is
+just `LnkSta < LnkCap`, i.e. a Gen5 drive on a Gen4 root port, as predicted);
+`nvme1n1` = Intel **600p** 238.5G at `0000:04:00.0`, `8GT/s ×4`. Root
+`UUID=4a51f320…` is `nvme0n1p3`; the old `@home` `UUID=6ed46d55…` is `nvme1n1p2`.
+
+**The 980 PRO is no longer attached** — only two NVMe devices exist. Windows is
+therefore not present on this machine at all right now, which supersedes the
+"Windows stays on the 980 PRO" wiring in `storage-migration.md`.
+
+Home: **134 G**, `1,685,101` regular files against the documented `1,681,377`
+(+3,724, 0.22%), `2,051,928` entries including directories. The size match is
+exact; the file count grew from ordinary post-mirror activity.
+
+Two of my own checks were wrong before the system was: `plasmashell-wedge-watch.timer`
+is a **system** unit, so `systemctl --user is-active` reports `inactive` while the
+timer is healthy — check it without `--user`. And a section-header extraction
+filter (`< 70 chars`) hid section 10 of the inventory, which then looked missing.
+Both are recorded because both would fool the next reader identically.
+
+### 2. The continuation trigger is gone
+
+The autostart entry deleted itself; the two remaining files were removed.
+
+    ls ~/.config/autostart/pi-continue.desktop        # absent, as designed
+    rm -f ~/.local/bin/pi-continue-once ~/.pi/post-reboot-continue.txt
+    # undo: none wanted — the trigger is single-use by design
+
+Verified all three absent afterwards. `~/.config/autostart/` now holds only
+`pam_kwallet_init.desktop`. No net-state note is needed beyond this: a one-shot
+trigger that is removed is absent, not disabled.
+
+### 3. chaotic-aur bootstrapped
+
+Keyring and mirrorlist come **from chaotic itself**, not from Arch.
+
+    sudo pacman-key --recv-key 3056513887B78AEB --keyserver keyserver.ubuntu.com
+    sudo pacman-key --lsign-key 3056513887B78AEB
+    cd /tmp && curl -fsSL -o chaotic-keyring.pkg.tar.zst \
+        https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst
+    cd /tmp && curl -fsSL -o chaotic-mirrorlist.pkg.tar.zst \
+        https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst
+    sudo pacman -U --noconfirm /tmp/chaotic-keyring.pkg.tar.zst /tmp/chaotic-mirrorlist.pkg.tar.zst
+    sudo cp -a /etc/pacman.conf /etc/pacman.conf.bak-20261017
+    printf '\n[chaotic-aur]\nInclude = /etc/pacman.d/chaotic-mirrorlist\n' | sudo tee -a /etc/pacman.conf
+    sudo pacman -Syu --noconfirm
+    # undo: remove the [chaotic-aur] block from /etc/pacman.conf,
+    #       sudo pacman -Rns chaotic-mirrorlist chaotic-keyring,
+    #       sudo pacman-key --delete 3056513887B78AEB
+
+**The CDN 303s.** `curl -f` without `-L` follows nothing, writes a **0-byte file**
+and still exits 0 — `sha256sum` then reports `e3b0c442…`, the hash of the empty
+string. Both downloads were empty on the first attempt and had to be redone with
+`-L`. Check the byte count before `pacman -U`.
+
+Verified: `chaotic-keyring 20251028-1`, `chaotic-mirrorlist 20260428-1` (it
+upgraded on the first `-Syu`), `pacman-conf --repo-list` shows `chaotic-aur`,
+mirrorlist 349 lines. Snapshots 20/21 and 22/23.
+
+### 4. Packages restored
+
+    sudo pacman -Syu --noconfirm google-chrome qimgv-git
+    # undo: sudo pacman -Rns google-chrome qimgv-git
+    paru -S --noconfirm --needed netgen-git magic
+    # undo: sudo pacman -Rns netgen-git magic
+
+`google-chrome 155.0.8059.84-1` and `qimgv-git 1.0.2.r190.g3127a2d-1.22` come from
+chaotic-aur; qimgv pulled `opencv`, `blas`, `cblas`, `lapack`, `verdict` — 575 MiB
+installed, which is the real cost of that viewer. `netgen-git
+6.2.2608.r60.g1507093-1` and `magic 8.3.685-1` are AUR-only (in no binary repo)
+and were built with `paru`, which goes through pacman and therefore logs normally.
+Verified by binary: `/usr/bin/google-chrome-stable --version`,
+`/usr/bin/qimgv`, `/usr/bin/netgen`, `/usr/bin/magic`. Snapshots 24/25 and 26-31.
+
+Note for future AUR work: `grep -i error` on a pacman build log matches every line
+because `-Werror=format-security` is in the flags. Filter on `\berror\b` instead.
+
+### 5. MarkdownBlaze: installed and verified, and it does not render
+
+Its GitHub release is **v1.0.26** (the file documented 1.0.23), asset
+`markdownblaze-1.0.26-1-x86_64.pkg.tar.zst`. The published SHA256 was compared by
+hand, because `SHA256SUMS` prefixes `./arch/` and a flat `sha256sum -c` therefore
+verifies nothing:
+
+    gh release download --repo bwets/MarkdownBlaze \
+        --pattern '*x86_64.pkg.tar.zst' --pattern SHA256SUMS -D /tmp/mdb
+    # c0a3cf601da901b6f06eaebf884cd30a20ae3cb45be722a17f3213467dd729a7  ./arch/markdownblaze-1.0.26-1-x86_64.pkg.tar.zst
+    sudo pacman -U --noconfirm /tmp/mdb/markdownblaze-1.0.26-1-x86_64.pkg.tar.zst
+    # undo: sudo pacman -Rns markdownblaze
+
+The package name is now lowercase `markdownblaze` and it installs to
+`/opt/markdownblaze` (was `MarkdownBlaze` / `/opt/MarkdownBlaze`). SHA256 matched.
+Snapshots 32/33.
+
+**It opens a window and paints nothing.** The title bar draws; the content area is
+~99.7% black (6 distinct colours, mean 0.0028 of white) with or without a document
+argument. Measured by screen grab, which is the only check that sees it:
+
+- the 1.0.23 signature `Gdk-Message: Error 71 (Protocol error) dispatching to
+  Wayland display` is **gone**; 1.0.26 stays alive and logs no error at all
+- `mdSetDocumentTitle` lines: **0**, which was the documented pass signal
+- `WEBKIT_DISABLE_DMABUF_RENDERER=1` (the documented workaround) changes
+  **nothing** — captures are byte-identical with and without it
+- the same treatment that containered plasmashell (`__EGL_VENDOR_LIBRARY_FILENAMES=
+  …/50_mesa.json`, `LIBGL_ALWAYS_SOFTWARE=1`, `MESA_LOADER_DRIVER_OVERRIDE=llvmpipe`)
+  also changes nothing
+
+So the acceptance test this repo recorded is **obsolete**:
+"absence of the Protocol error" passes on a completely blank window. **The valid
+test is a screen grab showing rendered content.** The shim is installed anyway,
+because it is the documented entry point and costs nothing, but it is not currently
+achieving its purpose:
+
+    /usr/local/bin/MarkdownBlaze   (root:root 0755, shebang on line 1)
+    exec env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/bin/MarkdownBlaze "$@"
+    # undo: sudo rm -f /usr/local/bin/MarkdownBlaze
+
+Status: **installed, unusable, not diagnosed further.** Do not record it as working
+and do not re-apply the 1.0.23 workaround believing it fixes anything. Next step is
+to try the upstream tarball rather than the Arch package, or pin 1.0.23.
+
+### 6. PlasmaZones: keep 3.4.19-1, do **not** build 3.5.1 locally
+
+The premise that the packaged build is stale for KWin 6.8 was **tested and did not
+reproduce**:
+
+    sudo pacman -Syu --noconfirm plasmazones
+    systemctl --user start plasmazones.service
+    # undo: sudo pacman -Rns plasmazones
+
+On `kwin 6.8.0-1.1`, `plasmazones 3.4.19-1` is `active`, `enabled`, ships
+`kwin_effect_plasmazones.so`, logs `Panel geometry: ready` / `panelGeometryReady` /
+`Pending restores: panel geometry ready, notifying effect`, and produces
+**zero** occurrences of `Compositor bridge did not register` — measured across the
+whole boot, not just at start. No errors or warnings from the unit.
+
+Decision: **no local build**, so no "rebuild on every kwin upgrade" burden and no
+chance of a stale KWin effect after an upgrade. Re-test with
+`journalctl --user -b | grep -c 'Compositor bridge did not register'` after any kwin
+major bump; build 3.5.1 only if that stops being 0. Snapshots 34/35.
+
+One warning appears at startup and is unrelated to this:
+`validateExeAndTrust: cannot resolve /proc/1133/exe — rejecting ":1.10"`.
+
+### 7. mdmonitor: masked
+
+It failed every boot: `mdadm: No mail address or alert command - not monitoring.`
+There *is* an array to monitor — `md127`, a degraded `raid1 [2/1] [U_]` on `sdb3`,
+ext4, `active (auto-read-only)`, **not mounted**, and listed in no `ARRAY` line in
+`/etc/mdadm.conf` — but no data depends on it and there is no MTA, so `MAILADDR`
+would alert into nothing.
+
+    sudo systemctl mask mdmonitor.service
+    sudo systemctl reset-failed mdmonitor.service
+    # undo: sudo systemctl unmask mdmonitor.service
+
+`systemctl --failed` is now **0 units for both system and user**, which is the
+point: a permanently failed unit desensitises the one check that surfaces real
+failures, and this repo has been reporting "mdmonitor is the only failed unit" for
+weeks. `md127` remains assembled and unaffected by the mask. If monitoring is ever
+wanted, add `PROGRAM /usr/bin/logger -t mdmonitor` to `/etc/mdadm.conf` (no MTA
+required) and unmask.
+
+### 8. Inventory audit — the diff, read as a checklist
+
+    bash scripts/premigration-inventory.sh
+    # -> ~/Documents/premigration-inventory-2026-10-17{,.redacted}.txt.gz
+
+25.9 KB against the 30.6 KB 2026-10-11 baseline. Per-section line deltas, and the
+triage of the "not ignorable" categories the script defines:
+
+- **Section 3/4 (unowned config)** — 35→12 and 158→40 lines removed. A fresh
+  install owns most of `/etc`, so this is expected shrinkage, *not* a gap. No old
+  unowned file is missing that the repo wanted.
+- **Section 5 (enabled units)** — only real deltas are `greetd.service` gone
+  (replaced by `plasmalogin.service`, expected) and `hermes-gateway.service` gone
+  (removed 2026-10-14, expected). `autovt@tty3`, `nvidia-driver-watch.timer` and
+  `plasmashell-wedge-watch.timer` are all present. **No unit gap.**
+- **Section 7 (subvolumes/hooks/presets)** — `@ @home @root @srv @cache @tmp @log`
+  plus `.snapshots` all present, snap-pac hooks in place. **No gap.**
+- **Section 10 (privilege/auth)** — content present in both; the only removals are
+  the `greetd*` PAM files and their three backups, correct now that greetd is gone.
+- **Section 2 (packages)** — 103 explicitly-installed packages from the old system
+  are absent, 42 are new. Triaged in full:
+  - *intentional, do not restore* — the whole GNOME stack and its `gvfs-*`/`grilo`
+    satellites, the Hyprland stack (`hypr*`, `waybar`, `wlogout`, `swaync`, `rofi`,
+    `kitty`, `cachyos-hypr-noctalia`, `noctalia-greeter`), the other-DE
+    screenshot/notification tools (`dunst`, `flameshot`, `scrot`, `screengrab`,
+    `grimblast-git`, `cosmic-screenshot`, `pantheon-screenshot`, `fbgrab`,
+    `ffcast`, `gnome-screenshot`), `gdm` and `sddm` (→ plasmalogin), the Qt5 set
+    (`kvantum-qt5`, `qt5-graphicaleffects`, `qt5-quickcontrols`, `qt5ct`),
+    `glibc-debug`, `shelly-flatpak-backend`, `cliphist`, `udiskie`.
+  - *not a gap* — `MarkdownBlaze` → `markdownblaze` is a rename by upstream,
+    `plasma-meta`/`plasma-workspace` are now dependencies rather than explicit, and
+    `ghostscript` **is installed** (10.08.0-1.1) as a dependency — it appears in the
+    `-Qqe` diff only because it is no longer *explicit*. The explicit-package diff
+    over-reports; always confirm a "gone" package with `pacman -Q` before restoring it.
+  - *unresolved, user's call* — `entr`, `starship`, `luarocks`, `sweethome3d`, and
+    the foreign `blt-git`. These are tools someone asked for once; nothing in the
+    repo says whether they are still wanted. Each confirmed genuinely absent with
+    `pacman -Q`. Not installed.
+
+Both inventory copies stay in `~/Documents/`; the redacted one is the committed
+artifact.
