@@ -4601,3 +4601,39 @@ captures, desktop ready 16.30 / 16.30 / 16.30 / 16.37 s. Disk enumeration is now
 its own runs, and the "capture not due yet" wording was exercised for real when a read-out landed 5 s
 early: the capture was taken on demand for the same boot and deduplicated to one row, which is the
 behaviour that keeps a human-triggered run from inflating the sample count.
+
+## 2026-10-17 (late) — browser profiles wiped ahead of the copy, with a snapshot as the undo
+
+Decision: no browser profile comes to the new system, and nothing in them was worth keeping (owner's
+call). Done *before* the home mirror, so the copy carries no profile baggage and is 19 GB smaller.
+
+    do:
+      sudo btrfs subvolume snapshot -r /home /.snapshots/home-before-browser-wipe-2026-10-17-1514
+      rm -rf ~/.config/google-chrome ~/.config/google-chrome-canary ~/.config/chromium
+      rm -rf ~/.cache/google-chrome ~/.cache/google-chrome-canary ~/.cache/chromium ~/.cache/mozilla
+    undo:
+      cp -a /.snapshots/home-before-browser-wipe-2026-10-17-1514/mylesp/.config/google-chrome \
+            /.snapshots/home-before-browser-wipe-2026-10-17-1514/mylesp/.config/google-chrome-canary \
+            /.snapshots/home-before-browser-wipe-2026-10-17-1514/mylesp/.config/chromium ~/.config/
+      # the caches are regenerable; restore them only if they are actually wanted
+      sudo btrfs subvolume delete /.snapshots/home-before-browser-wipe-2026-10-17-1514   # frees the space
+
+Verified before anything was removed: the guards refused to proceed unless each target was a directory
+(not a symlink) carrying Chrome's `Default/`/`Local State` markers, and no browser was running, so
+nothing was writing during the delete. Verified after: the snapshot contains all three deleted profiles
+(`sudo ls /.snapshots/home-before-browser-wipe-2026-10-17-1514/mylesp/.config/`), so the undo path is
+real rather than theoretical.
+
+Sizes, measured with `du` before and after:
+
+    before   ~/.config/google-chrome 6.4G  -canary 6.1G  chromium 394M
+             ~/.cache/google-chrome 1.8G   -canary 1.6G  chromium 23M  mozilla 2.3G
+    after    $HOME 150G -> 131G          ~/.cache 55G -> 50G
+
+**The space does not come back yet, and that is deliberate.** A btrfs snapshot shares the deleted
+data's extents, so `df /home` still reports 208 G used / 25 G free; the 19 GB reappears the moment the
+snapshot is deleted. Dropping the snapshot is therefore the point of no return, and it deserves one
+deliberate decision rather than happening by accident during cleanup.
+
+Firefox's *profile* was left alone (`~/.config/mozilla` 197 M + `~/.mozilla` 383 M): different browser,
+not asked for. Its cache is gone, which costs nothing.

@@ -26,6 +26,13 @@ From the six before-runs (spread = max−min over min):
   wanders with the drive's own background work. Quote the **median**: adding a sixth run slid the
   4K-write mean by 8 % while its median barely moved.
 
+One comparability caveat that matters for the rebuild: **the before-runs were taken with `/home` at
+89–90 % full** (208 GB used of 235 GB), and the after-runs will be on a nearly-empty new disk. The
+filesystem jobs are space-sensitive — that is part of why 4K random write swings 250 % — so a
+better-looking after-number for `file_*` should be treated as unproven until the `raw_*` jobs agree:
+those measure the drive itself, not how full it is, and they are the ones that can show the 9100 PRO
+actually being faster than the 38,280-hour 600p.
+
 Runs 1–3 were taken before the vkmark parser was fixed (`FPS: N` and `vkmark Score: N` were not
 being read), so the GPU metrics average over three samples. `--average` counts per metric, so
 every other number averages over six.

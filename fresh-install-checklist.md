@@ -97,12 +97,12 @@ verbatim copy with session state.
 
 Three things in this home that are easy to misjudge:
 
-- **The browser profiles are 12.5 G and live in `~/.config`, not `~/.cache`**: `google-chrome` 6.4 G
-  and `google-chrome-canary` 6.1 G (plus `chromium` 394 M). Excluding `~/.cache` does not shrink them,
-  and a verbatim copy takes their internal `Cache/`, `Code Cache/`, `Service Worker/` and `GPUCache/`
-  subdirectories with it. Excluding *those* subdirectories is the one place a smarter rsync would save
-  real time and space without losing anything that matters; `chrome-fixes.md` records which profiles
-  are actually in use.
+- **The browser profiles are gone as of 2026-10-17**, deliberately, before this copy: the three
+  Chrome-family profiles (`~/.config/google-chrome` 6.4 G, `-canary` 6.1 G, `chromium` 394 M) and their
+  caches were wiped (19 GB in total), so the copy no longer carries them — which also removes the only
+  reason to consider excluding `Cache/`-style subdirectories. The undo is a btrfs snapshot of `@home`,
+  so the space is still allocated until that is dropped; see `customizations.md`, 2026-10-17 (late).
+  Firefox's own profile (580 M) was left in place.
 - **Session-restore state travels**: `~/.config/session/` (a Dolphin entry from 2026-10-15, a KWin
   entry from 2026-09-10) and `ksmserverrc`. The new system's first login may therefore try to reopen
   what was open here. Clearing `~/.config/session/` after the mirror, or setting the login mode to an
@@ -113,14 +113,15 @@ Three things in this home that are easy to misjudge:
   is worth re-checking rather than inheriting blindly. Anything installed system-wide (the `flathub`
   system remote, `/var/lib/flatpak`) is **not** in home and must be set up again.
 
-Sizing, measured 2026-10-17: `$HOME` is **150 GB in 1,881,609 files** and `/home` is at 90 % (25 GB
-free). The copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB
+Sizing, measured 2026-10-17 *after* the browser-profile wipe (it was 150 GB in 1,881,609 files before
+it): `$HOME` is **131 GB** and `/home` is at 90 % (25 GB free — held there by the wipe's snapshot, not
+by data). The copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB
 QD1 — so budget tens of minutes. Largest directories, regenerable ones marked `*`:
 
 ```text
-.cache 55G *   .local 25G      .config 14G     build-work 12G   engineering-loadout 11G
-.ciel 5G       .codex 3.1G     .volare 2.7G    Documents 2.7G   shed-design-private 2.4G
-.npm 2.2G *    .rustup 1.5G *  .cargo 685M *   loadout_backups 779M
+.cache 50G *   .local 25G      build-work 12G  engineering-loadout 11G   .ciel 5G
+.codex 3.1G    .volare 2.7G    Documents 2.7G  shed-design-private 2.4G   .npm 2.2G *
+.rustup 1.5G * .cargo 685M *   loadout_backups 779M      (.config ~1.5G after the wipe; was 14G)
 
 must carry, verify by name afterwards: .ssh 16K  .gnupg 80K  .config/systemd 76K
 .local/share/kwin 8K  .local/share/applications 36K  kwinrc 4K  kwinoutputconfig.json 4K
