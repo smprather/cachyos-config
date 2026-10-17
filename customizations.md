@@ -4654,3 +4654,28 @@ both directories, so the undo above covers Firefox as well. Two things the guard
 
 `$HOME` stays at 131 G to the rounded `du` (580 M does not move it) and `df /home` still reports 208 G
 used / 25 G free: the space, Firefox's included, remains allocated until the snapshot is dropped.
+
+## 2026-10-17 (later still) — the cache comes over after all
+
+Reversing the earlier recommendation: `~/.cache` is copied with the rest of home, because too much of it
+is downloaded material that would only be fetched again (owner's call). The measurement that settled it,
+and the surprise inside it:
+
+    .cache/uv                    5.7G   downloaded wheels — the stated reason, and exactly right
+    .cache/pip                   902M   downloaded wheels
+    .cache/ms-playwright         656M   browser binaries
+    .cache/puppeteer             261M   browser binaries
+    .cache/engineering-loadout    25G   loadout build cache  } 36G together: the real bulk,
+    .cache/loadout-build          11G   loadout build cache  } and not what "uv" suggested
+    .cache/pre-commit            2.5G   hook environments
+    .cache/deez                  1.1G   .cache/hyde 780M (HyDE, being shed anyway)
+    .cache/paru 673M  .cache/puccinialin 644M  .cache/Shelly 422M  .cache/opengrep 246M
+    derived, and not worth excluding: fontconfig 6.9M  ksycoca 1.4M  mesa_shader_cache 5.2M
+
+The copy is therefore 131 GB rather than 81 GB, and the loadout's two build caches are the only
+exclusions that would be worth making if copy *time* ever matters more than rebuilding the loadout.
+Nothing is excluded today: the mirror is fully verbatim again.
+
+Also worth recording because it is load-bearing for a cache copy: **`-H`** (hardlinks). uv's cache is
+largely hardlinked trees, and it is explicit in the `-aHAX` the checklist prescribes — without `-H`
+rsync would duplicate every hardlinked object instead of sharing them.

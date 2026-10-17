@@ -63,9 +63,9 @@ and a note on what changed:
    - **`--dry-run --itemize-changes` first, and read the deletion list** (deletions are marked
      `*deleting`).
    - **`--delete-after`**, not during: deletions happen only once the transfer has completed.
-   - Excluded paths are *protected* from deletion unless `--delete-excluded` is also given, so
-     `--exclude=/.cache` leaves any `.cache` on the new side alone — correct if the exclusion is about
-     not copying rather than about purging.
+   - Excluded paths are *protected* from deletion unless `--delete-excluded` is also given. Nothing is
+     excluded any more (the cache comes over — see below), so this only matters if an exclusion is ever
+     added back.
 2. **The source is consistent for free.** Booting from the new disk means the old system is *not
    running*, so mounting its `@home` read-only is already a quiescent source — no snapshot needed.
    Pushing from a running old system (or pulling from one) would race the browser profiles and caches
@@ -116,14 +116,15 @@ Three things in this home that are easy to misjudge:
   system remote, `/var/lib/flatpak`) is **not** in home and must be set up again.
 
 Sizing, measured 2026-10-17 *after* the browser-profile wipe (it was 150 GB in 1,881,609 files before
-it): `$HOME` is **131 GB** and `/home` is at 90 % (25 GB free — held there by the wipe's snapshot, not
-by data). The copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB
-QD1 — so budget tens of minutes. Largest directories, regenerable ones marked `*`:
+it): the copy is **131 GB**, of which `.cache` is 50 G — it was going to be 81 GB while `.cache` was
+excluded. `/home` sits at 90 % (25 GB free, held there by the wipe's snapshot rather than by data). The
+copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB QD1 — so budget
+tens of minutes. Largest directories:
 
 ```text
-.cache 50G *   .local 25G      build-work 12G  engineering-loadout 11G   .ciel 5G
-.codex 3.1G    .volare 2.7G    Documents 2.7G  shed-design-private 2.4G   .npm 2.2G *
-.rustup 1.5G * .cargo 685M *   loadout_backups 779M      (.config ~1.5G after the wipe; was 14G)
+.cache 50G     .local 25G      build-work 12G  engineering-loadout 11G   .ciel 5G
+.codex 3.1G    .volare 2.7G    Documents 2.7G  shed-design-private 2.4G   .npm 2.2G
+.rustup 1.5G   .cargo 685M     loadout_backups 779M      (.config ~1.5G after the wipe; was 14G)
 
 must carry, verify by name afterwards: .ssh 16K  .gnupg 80K  .config/systemd 76K
 .local/share/kwin 8K  .local/share/applications 36K  kwinrc 4K  kwinoutputconfig.json 4K
@@ -143,15 +144,16 @@ findmnt -no SOURCE,UUID,OPTIONS /mnt/old-home     # ro is the point, and the UUI
 
 # 3. dry run first: this is where the deletions (*deleting) are visible before anything happens
 sudo rsync -aHAX --numeric-ids --delete-after --itemize-changes --dry-run \
-     --exclude=/.cache /mnt/old-home/ /home/mylesp/ | head -40
+     /mnt/old-home/ /home/mylesp/ | head -40
 
-# 4. mirror for real (--numeric-ids keeps uid/gid 1000 as-is)
+# 4. mirror for real (--numeric-ids keeps uid/gid 1000 as-is; -H is load-bearing: uv's cache is
+#    largely hardlinks, and without -H the copy would inflate instead of sharing them)
 sudo rsync -aHAX --numeric-ids --delete-after --info=progress2 \
-     --exclude=/.cache /mnt/old-home/ /home/mylesp/
+     /mnt/old-home/ /home/mylesp/
 
 # 5. verify — every line must be right before logging in
 sudo rsync -aHAX --numeric-ids --delete-after --dry-run --itemize-changes \
-     --exclude=/.cache /mnt/old-home/ /home/mylesp/ | head -20   # expect NO output at all
+     /mnt/old-home/ /home/mylesp/ | head -20   # expect NO output at all
 findmnt -no SOURCE,UUID /home                            # the new NVMe, not the old root
 ls -nd /home/mylesp                                      # uid/gid 1000
 ls -l /home/mylesp/.config/systemd/user/plasma-plasmashell.service.d/   # containment drop-in
@@ -160,8 +162,15 @@ sudo umount /mnt/old-home                                # then log in and watch
 
 Open items to decide before the copy runs:
 
-- **`~/.cache` (55 G)** — the one recommended deviation from "verbatim": 37 % of the volume, most of
-  the file churn, and regenerated anyway on a new install.
+- **`~/.cache` is copied after all** — owner's call, 2026-10-17: too much of it is downloaded material
+  that would only be fetched again. `.cache/uv` 5.7 G, `.cache/pip` 902 M, `.cache/ms-playwright`
+  656 M and `.cache/puppeteer` 261 M are exactly that. It is 50 G — 38 % of the copy and most of its
+  file count — but it is real work avoided. Composition worth knowing: **36 G of it is the loadout's
+  build cache** (`.cache/engineering-loadout` 25 G + `.cache/loadout-build` 11 G), so those two are the
+  only exclusions worth considering if copy *time* ever matters more than rebuilding the loadout. The
+  purely derived caches are not worth excluding (fontconfig 6.9 M, ksycoca 1.4 M, mesa_shader_cache
+  5.2 M — under 15 M together, and they rebuild themselves), and HyDE's 780 M plus the dead GNOME
+  caches (~190 M) belong to things this rebuild is shedding anyway.
 - **HyDE/Hyprland leftovers (313 M, nearly all `~/.config/hyde`)** — inert without Hyprland installed,
   but this rebuild exists partly to shed the layered-desktop mess that `desktop-environments.md`
   documents. Verbatim carries them along.
