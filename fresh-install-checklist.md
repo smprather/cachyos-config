@@ -43,25 +43,42 @@ for good (`benchmarks/README.md`, `storage-migration.md`).
 - Cross-check the package set: `pacman -Qqen | wc -l` against the inventory copy (326 explicit
   packages, 1 flatpak on 2026-10-14).
 
-## 1b. Home comes over verbatim (before the new system ever boots)
+## 1b. Home comes over verbatim (a mirror, pulled from the new system)
 
 Decided 2026-10-17: `$HOME` moves to the new install **verbatim**, not selectively.
 
-**Direction: push from the old system, into the new `@home` while the new system is still booted from
-nothing.** Not a pull from the new system, for three reasons:
+**Direction: pull — from the new system, at a TTY, before its first graphical login, reading the old
+`@home` mounted read-only, with `rsync --delete-after` so the result is a true mirror.** Two reasons,
+and a note on what changed:
 
-1. **Verbatim needs an empty target.** The new home is populated by the installer and then by Plasma
-   at first graphical login. Copying into a populated home is a *merge*: our files win on collisions,
-   but anything the new install wrote and we lack stays. Pushing into the new `@home` before the new
-   system has ever booted is the only way to get verbatim by construction.
-2. **A read-only snapshot freezes the source.** `btrfs subvolume snapshot -r /home` gives a consistent
-   source while the old system stays usable; copying out of a live home races the browser profiles and
-   caches that are still being written. That is the pull's one genuine advantage, obtained without
-   giving up the empty target.
-3. **The tooling is here** — the repo, the scripts, the inventory, the verification, and sudo.
+1. **`--delete-after` is what makes it verbatim, and it removes the "target must be empty" constraint
+   an earlier version of this section used to argue for pushing.** Without it, copying into a home the
+   installer already touched is a *merge*: our files win on collisions, their leftovers stay. With it,
+   the destination mirrors the source exactly — including deleting the installer's `/etc/skel` copies.
+   Guard rails, because `--delete` can destroy data:
+   - **Prove the destination before running it.** `rsync --delete` deletes into whatever is mounted at
+     the destination, so a missing or stale mount means deleting into the *wrong filesystem*. Check
+     `findmnt -no SOURCE,UUID /home` — it must be the new NVMe — and never assume a mount survived a
+     reboot.
+   - **`--dry-run --itemize-changes` first, and read the deletion list** (deletions are marked
+     `*deleting`).
+   - **`--delete-after`**, not during: deletions happen only once the transfer has completed.
+   - Excluded paths are *protected* from deletion unless `--delete-excluded` is also given, so
+     `--exclude=/.cache` leaves any `.cache` on the new side alone — correct if the exclusion is about
+     not copying rather than about purging.
+2. **The source is consistent for free.** Booting from the new disk means the old system is *not
+   running*, so mounting its `@home` read-only is already a quiescent source — no snapshot needed.
+   Pushing from a running old system (or pulling from one) would race the browser profiles and caches
+   still being written, and *that* case is the one that needs `btrfs subvolume snapshot -r /home`
+   first.
+3. **The new system needs exactly one tool for this**: `rsync` (`sudo pacman -Syu rsync`). The old home
+   stays mounted at `/mnt/old-home` for the duration, so this repo and its scripts are readable from it
+   — the verification steps below can be run from either side.
 
-If the new install is smoke-tested *before* the copy, the target is no longer pristine: accept that
-and verify with a diff instead of assuming verbatim.
+Do it from a TTY, not a desktop session: the destination is the running system's own home, so a
+logged-in Plasma would be writing into it during the mirror. Logging in *after* the copy is also the
+nicest ordering — the new install's first KDE start then happens on top of the mirrored home, which is
+the whole point of doing this verbatim.
 
 Sizing, measured 2026-10-17: `$HOME` is **150 GB in 1,881,609 files** and `/home` is at 90 % (25 GB
 free). The copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB
@@ -81,30 +98,49 @@ Steps, run on the old system. Identify every disk by model or PARTUUID, never by
 boot-loop captures measured the NVMe enumeration flipping between boots:
 
 ```bash
-# 1. freeze the source (outside $HOME, so it is not part of the copy; delete when done)
-sudo btrfs subvolume snapshot -r /home /.snapshots/home-premigration-$(date +%F)
+# 1. boot the NEW system and stop before a graphical login (a TTY: Ctrl+Alt+F3)
 
-# 2. mount the NEW root's @home subvolume (new NVMe, identified by UUID)
-sudo mkdir -p /mnt/new-home
-sudo mount -o subvol=/@home /dev/disk/by-uuid/<new-root-uuid> /mnt/new-home
+# 2. mount the OLD root's @home read-only — identify it by UUID, never by device node
+sudo mkdir -p /mnt/old-home
+sudo mount -o ro,subvol=/@home /dev/disk/by-uuid/<old-root-uuid> /mnt/old-home
+findmnt -no SOURCE,UUID,OPTIONS /mnt/old-home     # ro is the point, and the UUID is the old disk
 
-# 3. copy. --numeric-ids keeps uid/gid 1000 as-is; /.cache excluded by recommendation only
-sudo rsync -aHAX --numeric-ids --info=progress2 --exclude=/.cache \
-     /.snapshots/home-premigration-YYYY-MM-DD/ /mnt/new-home/
+# 3. dry run first: this is where the deletions (*deleting) are visible before anything happens
+sudo rsync -aHAX --numeric-ids --delete-after --itemize-changes --dry-run \
+     --exclude=/.cache /mnt/old-home/ /home/mylesp/ | head -40
 
-# 4. verify — all four must pass BEFORE the new system boots
-sudo rsync -aHAX --numeric-ids --dry-run --itemize-changes \
-     /.snapshots/home-premigration-YYYY-MM-DD/ /mnt/new-home/ | head -20   # expect nothing
-ls -nd /mnt/new-home/mylesp                                              # uid/gid 1000
-ls -l /mnt/new-home/mylesp/.config/systemd/user/plasma-plasmashell.service.d/   # containment
-find /.snapshots/home-premigration-YYYY-MM-DD -type f | wc -l            # vs the destination
+# 4. mirror for real (--numeric-ids keeps uid/gid 1000 as-is)
+sudo rsync -aHAX --numeric-ids --delete-after --info=progress2 \
+     --exclude=/.cache /mnt/old-home/ /home/mylesp/
+
+# 5. verify — every line must be right before logging in
+sudo rsync -aHAX --numeric-ids --delete-after --dry-run --itemize-changes \
+     --exclude=/.cache /mnt/old-home/ /home/mylesp/ | head -20   # expect NO output at all
+findmnt -no SOURCE,UUID /home                            # the new NVMe, not the old root
+ls -nd /home/mylesp                                      # uid/gid 1000
+ls -l /home/mylesp/.config/systemd/user/plasma-plasmashell.service.d/   # containment drop-in
+sudo umount /mnt/old-home                                # then log in and watch the desktop
 ```
 
-Open items to decide on the day: whether `~/.cache` really is excluded (the one deviation from
-"verbatim" — it is 37 % of the volume and most of the file churn); whether the regenerable toolchains
-(`.npm`, `.rustup`, `.cargo`, `build-work`, `.ciel`, `.volare`) come along or get rebuilt; and
-`/var/lib/boot-loop/` — the boot-loop captures are **not** in home and must be copied explicitly if
-they are wanted on the new install.
+Open items to decide before the copy runs:
+
+- **`~/.cache` (55 G)** — the one recommended deviation from "verbatim": 37 % of the volume, most of
+  the file churn, and regenerated anyway on a new install.
+- **HyDE/Hyprland leftovers (313 M, nearly all `~/.config/hyde`)** — inert without Hyprland installed,
+  but this rebuild exists partly to shed the layered-desktop mess that `desktop-environments.md`
+  documents. Verbatim carries them along.
+- **The engineering loadout (`~/.local/share/loadout` 7.7 G + `~/engineering-loadout` 11 G)** — 18.7 G
+  and PATH-visible (`…/loadout/prefer` is first on PATH today). The path-shadowing policy in
+  `engineering-loadout-path.md` is a deliberate fix, so a verbatim copy must take the configuration
+  that arranges it too, and the PATH order on the new install wants checking afterwards.
+- **Regenerable toolchains** — `.npm` 2.2 G, `.rustup` 1.5 G, `.cargo` 685 M, `build-work` 12 G,
+  `.ciel` 5 G, `.volare` 2.7 G.
+- **`/var/lib/boot-loop/`** — the boot-loop captures are **not** in home and must be copied explicitly
+  if they are wanted on the new install.
+
+Not a concern, checked 2026-10-17: `~/.local/bin` is 373 M because it holds three self-contained
+binaries (`muse-bin-1.4.3-R5018.1` 327 M, `agent-deck` 33 M, `hydectl` 13 M) — no virtualenvs, so
+nothing there is tied to the old Python and it copies as-is.
 
 ## 2. Not in any package — recreate by hand
 
