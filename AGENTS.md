@@ -22,7 +22,14 @@ or changing the system without repeating old diagnostics.
   Chrome-family profiles plus Firefox's, their caches, and a `no-gpg-verify` flatpak remote's leftovers.
   The packages are still installed and will start fresh profiles; a missing profile is not a fault to
 diagnose. `chrome-fixes.md` describes the packages, not a profile that exists. See
-  `customizations.md`.
+`customizations.md`.
+- **2026-10-17: the running OS is a fresh CachyOS Plasma install on the 9100 PRO** (machine-id
+`61c3877c…`), with `$HOME` mirrored verbatim from the old install. The old system (machine-id
+`c918fefa…`, root on the Intel 600p) is still bootable in the chipset slot as the fallback and is
+where the pre-migration state lives. Everything below describing the old install's quirks is
+history unless it still reproduces — check it rather than assuming either way.
+- The **boot-capture units did not travel** (they live in `/etc` + `/usr/local`, not in `$HOME`).
+Re-install them from the pair in `customizations.md` if the boot loop is resumed.
 
 ## Read These First
 

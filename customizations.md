@@ -4695,3 +4695,69 @@ Anything wanted from it had to be taken out of the snapshot before this ran, and
 
     do:    sudo btrfs subvolume delete /.snapshots/home-before-browser-wipe-2026-10-17-1514
     undo:  none — the data is gone; the only remaining recovery path would be a backup made beforehand.
+
+## 2026-10-17 (night) — the fresh install onto the 9100 PRO, and $HOME mirrored into it
+
+The migration happened. This entry's subject is now a **different machine from the one above** — a
+fresh CachyOS Plasma install with machine-id `61c3877c…`, root on the 9100 PRO — while the old install
+(machine-id `c918fefa…`, root on the Intel 600p) stays bootable in the chipset slot as the fallback.
+
+**The install**, from the live USB (see §0a of `fresh-install-checklist.md` for the medium's
+provenance), is a stock CachyOS Plasma install onto the empty 9100 PRO. What the installer produced:
+
+    nvme0n1p1     1M     (bios/boot)
+    nvme0n1p2     4G     vfat   DC86-B945        -> /boot
+    nvme0n1p3   927.5G   btrfs  4a51f320-c9e1-43e0-94fa-d1b5c5d1d9b6
+                         subvolumes @ @home @root @srv @cache @tmp @log (+ @/.snapshots/1,2)
+                         fstab mounts all seven by subvol=, noatime,compress=zstd:1
+    user mylesp, uid/gid 1000, home /home/mylesp
+
+The drive itself sits in the CPU slot at `0000:01:00.0` and trains at 16GT/s x4 — a Gen5 drive down to
+Gen4, exactly the acceptance test `storage-migration.md` asks for.
+
+**One system change made from here, before boot:** the installer set the user's shell to `/bin/fish`,
+while this machine's PATH arrangement lives in `~/.bashrc`/`~/.profile` (and everything documented in
+`shell-startup-quirks.md` assumes bash). Changed with the new root mounted:
+
+    sudo usermod --root /mnt/new-root --shell /usr/bin/bash mylesp
+    # verify: rg '^mylesp:' /mnt/new-root/etc/passwd   -> /usr/bin/bash
+    # undo:   sudo usermod --shell /bin/fish mylesp   (on the new system)
+
+**The home mirror**, executed as a push from the old system with a frozen source — the direction
+flipped from the checklist's pull because the new system was shut down anyway, so the destination was
+quiescent and a snapshot covered the source-side race the pull had been chosen to avoid:
+
+    sudo btrfs subvolume snapshot -r /home /.snapshots/home-premigration-2026-10-17-1702
+    sudo mount -o rw,subvol=/@home /dev/disk/by-uuid/4a51f320-… /mnt/new-home
+    sudo systemd-run --unit=home-mirror --collect -p Type=oneshot -p TimeoutStartSec=infinity \
+         /usr/bin/rsync -aHAX --numeric-ids --delete-after \
+         /.snapshots/home-premigration-2026-10-17-1702/mylesp/ /mnt/new-home/mylesp/
+
+Measured: **2,047,807 entries, 131 GiB, 4 min 50 s wall clock** (≈460 MiB/s, 4 min 36 s CPU, 18.9G
+peak RSS for the file list). The dry run predicted **137 deletions**, all the new install's own skel
+and caches. Verified afterwards: 0 differing entries, home `1000:1000` mode `700`, 1,681,378 files,
+and the plasmashell EGL containment drop-in present in the mirrored home.
+
+**One real mistake, worth keeping.** I pointed rsync at the snapshot *root* instead of
+`<snapshot>/mylesp/`. `@home`'s root contains the single entry `mylesp/`, so the copy produced
+`/home/mylesp/mylesp/...` and left `/home/mylesp` owned `0:0` (rsync takes the destination directory's
+ownership from the source root). Repaired before boot by renaming the outer directory and promoting
+the inner one — instant, same filesystem:
+
+    sudo mv /mnt/new-home/mylesp /mnt/new-home/.outer-my-home
+    sudo mv /mnt/new-home/.outer-my-home/mylesp /mnt/new-home/mylesp
+    sudo rm -rf /mnt/new-home/.outer-my-home
+
+The lesson is in the first trap of `fresh-install-checklist.md` §1b, where the source path is now
+spelled `<snapshot>/mylesp/`. Had it gone unnoticed, the new system would have booted with a
+root-owned home containing one unrelated directory — i.e. a fresh desktop and no configuration.
+
+Also required before booting the new system: **unmount the new disk here.** A btrfs mounted read-write
+from this kernel cannot be mounted by another; the old system held `/mnt/new-home` open, and leaving
+it would have made the new system's own `@home` mount fail.
+
+Not yet done on the new system (the checklist's §2 table): the journal cap override
+(`50-retention.conf`, 2G — it ships with `SystemMaxUse=50M`), `/etc/sysctl.d/99-recovery.conf`, the
+VT3 autologin getty, the panel watchdog + its autokill flag, the KWin `fixpanel` shortcut, keyd, the
+greetd/noctalia config, and the boot-capture units (which live in `/etc` + `/usr/local` and therefore
+were **not** carried over by the home mirror).

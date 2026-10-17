@@ -168,30 +168,53 @@ Steps, run on the old system. Identify every disk by model or PARTUUID, never by
 boot-loop captures measured the NVMe enumeration flipping between boots:
 
 ```bash
-# 1. boot the NEW system and stop before a graphical login (a TTY: Ctrl+Alt+F3)
+# What was actually done on 2026-10-17. The direction flipped to a PUSH from the old system,
+# because the new system was shut down anyway: the destination was then quiescent, and a snapshot
+# covers the source-side race that the pull was originally chosen to avoid.
 
-# 2. mount the OLD root's @home read-only — identify it by UUID, never by device node
-sudo mkdir -p /mnt/old-home
-sudo mount -o ro,subvol=/@home /dev/disk/by-uuid/<old-root-uuid> /mnt/old-home
-findmnt -no SOURCE,UUID,OPTIONS /mnt/old-home     # ro is the point, and the UUID is the old disk
+# 1. freeze the source. NOTE: @home's root contains the directory mylesp/ — the snapshot is of
+the SUBVOLUME, not of the user's home.
+sudo btrfs subvolume snapshot -r /home /.snapshots/home-premigration-$(date +%F-%H%M)
 
-# 3. dry run first: this is where the deletions (*deleting) are visible before anything happens
+# 2. mount the NEW @home read-write and prove it is the new disk by UUID
+sudo mkdir -p /mnt/new-home
+sudo mount -o rw,subvol=/@home /dev/disk/by-uuid/<new-root-uuid> /mnt/new-home
+findmnt -no SOURCE,UUID /mnt/new-home
+
+# 3. dry run first — read the *deleting lines; they should be only the new install's skel and caches
 sudo rsync -aHAX --numeric-ids --delete-after --itemize-changes --dry-run \
-     /mnt/old-home/ /home/mylesp/ | head -40
+     /<snapshot>/mylesp/ /mnt/new-home/mylesp/ | head -40
 
-# 4. mirror for real (--numeric-ids keeps uid/gid 1000 as-is; -H is load-bearing: uv's cache is
-#    largely hardlinks, and without -H the copy would inflate instead of sharing them)
-sudo rsync -aHAX --numeric-ids --delete-after --info=progress2 \
-     /mnt/old-home/ /home/mylesp/
+# 4. mirror, as a transient unit so a long copy survives whatever shell started it
+sudo systemd-run --unit=home-mirror --collect -p Type=oneshot -p TimeoutStartSec=infinity \
+     /usr/bin/rsync -aHAX --numeric-ids --delete-after /<snapshot>/mylesp/ /mnt/new-home/mylesp/
 
-# 5. verify — every line must be right before logging in
-sudo rsync -aHAX --numeric-ids --delete-after --dry-run --itemize-changes \
-     /mnt/old-home/ /home/mylesp/ | head -20   # expect NO output at all
-findmnt -no SOURCE,UUID /home                            # the new NVMe, not the old root
-ls -nd /home/mylesp                                      # uid/gid 1000
-ls -l /home/mylesp/.config/systemd/user/plasma-plasmashell.service.d/   # containment drop-in
-sudo umount /mnt/old-home                                # then log in and watch the desktop
+# 5. verify and tidy — in this order, and the umount is not optional
+sudo rsync -aHAX --numeric-ids --delete-after --dry-run /<snapshot>/mylesp/ /mnt/new-home/mylesp/ | head  # nothing
+sudo ls -nd /mnt/new-home/mylesp                          # uid/gid 1000, mode 700
+sudo ls -l /mnt/new-home/mylesp/.config/systemd/user/plasma-plasmashell.service.d/   # containment drop-in
+sudo umount /mnt/new-home                                 # a btrfs mounted rw here cannot also be mounted
+                                                          # by the new system's kernel
+sudo btrfs subvolume delete /.snapshots/home-premigration-*
 ```
+
+**Two traps in that sequence, one of which bit on 2026-10-17:**
+
+1. **The source path must be `<snapshot>/mylesp/`, not `<snapshot>/`.** The `@home` subvolume's root
+   holds exactly one entry, the directory `mylesp/`, so pointing rsync at the root copies *that
+   directory* into the home — leaving `/home/mylesp` root-owned with the real home nested inside it
+   at `/home/mylesp/mylesp`. That is what happened, and it was repaired by renaming the outer
+   directory and promoting the inner one (instant, same filesystem); see `customizations.md`. rsync
+   also takes the *destination* directory's ownership from the source root, which is why the home
+   came out `0:0` rather than `1000:1000`.
+2. **Unmount before booting the new system.** A btrfs mounted read-write from here cannot be mounted
+   by another kernel; the new system would fail to mount `@home` and land on a broken/empty home.
+
+Measured on the day: **2,047,807 entries, 131 GiB, 4 min 50 s wall clock** (~460 MiB/s average, and
+4 min 36 s of CPU — the file count, not the NVMe link, is the cost). The dry run predicted **137
+deletions**, all of them the new install's own skel and caches (`.cache/ksycoca*`,
+`event-sound-cache.tdb.<new-machine-id>`, `fish/generated_completions/*`, and `gtk-4.0/` files that had
+to go so this home's symlink could land).
 
 Open items to decide before the copy runs:
 
