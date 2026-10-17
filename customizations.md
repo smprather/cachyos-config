@@ -4679,3 +4679,19 @@ Nothing is excluded today: the mirror is fully verbatim again.
 Also worth recording because it is load-bearing for a cache copy: **`-H`** (hardlinks). uv's cache is
 largely hardlinked trees, and it is explicit in the `-aHAX` the checklist prescribes — without `-H`
 rsync would duplicate every hardlinked object instead of sharing them.
+
+**The wipe snapshot was dropped the same evening — the one deliberate irreversible step.** Verified
+against the exact path first, and checked that snapper's own subvolumes under `/.snapshots` (the root
+rollback path) were left untouched. Dropping it is what returns the space the wipe had been holding:
+
+    before   df /home  208 G used,  25 G free  (90 %)
+    after    df /home  190 G used,  42 G free  (83 %)     btrfs frees asynchronously — the first df
+                                                          after the delete still showed the old figure
+
+**There is no undo for the browser profiles any more.** That was the decision, not an oversight: 19.2 GB
+of Chrome-family and Firefox profile data (three Chrome profiles, their caches, Firefox's three
+configured profiles across both layout paths, and its cache) is now unrecoverable on this machine.
+Anything wanted from it had to be taken out of the snapshot before this ran, and nothing was.
+
+    do:    sudo btrfs subvolume delete /.snapshots/home-before-browser-wipe-2026-10-17-1514
+    undo:  none — the data is gone; the only remaining recovery path would be a backup made beforehand.
