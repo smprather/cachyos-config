@@ -37,6 +37,7 @@ reasoning needed to avoid known integration failures.
 - [plasmashell wedge](plasmashell-wedge.md) — the 2026-10-10 frozen panel and 40-second logout: the mechanism, what was ruled out, why the trigger is permanently unrecoverable, and the `plasmashell-watch/` watchdog that captures a backtrace before the next timeout kill; plus the `SystemMaxUse=50M` journal cap and the `shelly`-writes-no-pacman-log audit gap
 - [Frozen system recovery](frozen-system-recovery.md) — the ladder for "everything is frozen": panel-only (`fixpanel` / `Meta+Shift+F`), the passwordless VT3 rescue shell, what REISUB can and cannot do on this keyboard, why the power-button hold is safe on this btrfs/vfat layout, and how to boot one of the 53 limine snapshots when the system comes up broken
 - [Fresh install checklist](fresh-install-checklist.md) — the ordered route for a fresh CachyOS install onto the new NVMe: the inventory diff that makes it safe, the artifacts no package can restore (the panel watchdog, the VT3 rescue shell, the EGL containment, the KWin shortcut, the recovery sysctls), what does *not* carry over (the boot-menu snapshots), and the three choices that make it boring
+- [Benchmarks](benchmarks/README.md) — the before/after performance pair for that rebuild: `scripts/system-benchmark.sh` (boot, CPU, crypto, memory, disk through btrfs and raw, Vulkan), three-run averaging with the variance each metric can bear, and the control run showing that `storage-migration.md`'s "4K QD1" figures are mislabeled
 
 ## Provenance
 

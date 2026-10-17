@@ -33,8 +33,10 @@ with-heatsink SKU is 8.88 mm and will not fit under it.
 
 Not a reason to buy: raw speed on its own. Measured, the current root does 78.7 MB/s at 4K
 QD1 and 1.2 GB/s sequential, against 253 MB/s and 2.2 GB/s for the 980 PRO — the latter *on a
-3.0 link*. The real wins of replacing the root disk are space (41 GB free on a 256 GB root at
-83 %) and getting off a 38,280-hour, 33.5 TB-written drive.
+3.0 link*. [**The two "4K QD1" figures are mislabeled — they are QD8–QD32 numbers; see the
+correction of 2026-10-17 at the end of this document.**] The real wins of replacing the root disk
+are space (25 GB free on a 256 GB root at 89 %) and getting off a 38,280-hour, 33.5 TB-written
+drive.
 
 ## Target layout
 
@@ -451,3 +453,25 @@ Verified 2026-10-11 three ways: no `ntfs-3g` package, no `ntfs3` in the kernel, 
 things stand — every step that touches Windows data must happen **from Windows**. Installing
 `ntfs-3g` (`sudo pacman -Syu ntfs-3g`, with a pre-snapshot and a customizations entry) would allow
 read-only inspection from here.
+
+## Re-verified 2026-10-17 — the "4K QD1" figures above are mislabeled
+
+A recorded benchmark suite now exists (`scripts/system-benchmark.sh`; results and their variance
+in [benchmarks/README.md](benchmarks/README.md)). Re-measuring both drives with its exact flags
+showed that neither figure quoted above as "4K QD1" can be QD1:
+
+| Drive | doc's "4K QD1" | measured 4K QD1 | measured 4K QD32 | measured 1M sequential |
+| --- | --- | --- | --- | --- |
+| Intel 600p (the root) | 78.7 MB/s | 27 MiB/s raw, 33 MiB/s via btrfs | 199 MiB/s | 867 MiB/s raw |
+| Samsung 980 PRO | 253 MB/s | 56 MiB/s | 679 MiB/s | 2164 MiB/s (doc: 2.2 GB/s) |
+
+253 MB/s at 4 KiB is ~63 000 IOPS, ~16 µs per I/O — no NVMe device manages that with a single
+outstanding command; the QD1 floor is ~30–80 µs. The label was wrong, not the hardware: read those
+two figures as **QD8–QD32**. Sequential, by contrast, reproduces. The control run is saved
+verbatim as `benchmarks/2026-10-17-disk-control.txt`.
+
+One number worth carrying into the migration: the old root scales far worse with queue depth than
+the 980 PRO does — a QD32/QD1 ratio of 7.3× against 12.2×. The plan puts the new drive in the CPU
+slot, and `scripts/system-benchmark.sh after` plus `--diff` against the before-average is what will
+say whether that bought anything the owner can feel. Compare averages only: 4K random write spread
+95 % across three runs on this drive.

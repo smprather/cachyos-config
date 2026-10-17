@@ -16,12 +16,18 @@ install has booted a few times — that, plus the `sda3` copy, is the fallback
 
 ```bash
 scripts/premigration-inventory.sh      # read-only, ~33 s; writes the "before" copy
+scripts/system-benchmark.sh before     # ~2.5 min; run it three times (each run gets its own file),
+                                       # then --average them — see benchmarks/README.md
 ```
 
 That script exists to be **diffed**, and the diff is what makes a rebuild safe rather than
 hopeful: run it again on the new system and treat every difference as a gap found on purpose,
 while the old disk is still attached. Keep the unredacted copy in `~/Documents/` and only the
 redacted one in `inventories/` — this repo is published (`README.md`, "Provenance").
+
+The benchmark is the same idea for performance, and it has the same one-shot property: take the
+before-baseline **now**, while the old install is still the one booting, or the comparison is gone
+for good (`benchmarks/README.md`, `storage-migration.md`).
 
 ## 1. Install
 
@@ -86,7 +92,19 @@ event loop, so a shell stuck mid-frame makes systemd wait out its full `TimeoutS
 
 ```bash
 scripts/premigration-inventory.sh                     # the "after" copy, then diff the two
-systemctl --failed --no-legend; systemctl --failed --user --no-legend
+scripts/system-benchmark.sh after                    # three times, then --average, then --diff
+                                                      # against the before-average
+systemctl --failed --no-legend; systemctl --failed --user --no-legend   # expect mdmonitor.service
+                                                                        # unless mdadm.conf has a
+                                                                        # MAILADDR: customizations.md
+                                                                        # 2026-10-17 (boot capture)
+journalctl --user -b | grep -c 'Compositor bridge did not register'   # 0 — PlasmaZones' KWin
+                                                                       # effect is version-coupled;
+                                                                       # expect this until the repo's
+                                                                       # plasmazones is newer than
+                                                                       # 3.4.19-1 (see
+                                                                       # desktop-environments.md);
+                                                                       # is-active is NOT the test
 sysctl kernel.nmi_watchdog kernel.hardlockup_panic kernel.panic   # 1 / 1 / 15
 grep -c libnvidia-eglcore /proc/$(pgrep -x plasmashell)/maps      # 0
 limine-list | head                                    # kernels + a Snapshots section

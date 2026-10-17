@@ -1,29 +1,21 @@
 # Full hardware check
 
-Regenerate with `scripts/hardware-check.sh` — read-only, ~3 s, 13 sections. This file is
-the **redacted** copy: disk serial numbers, MAC addresses, IP addresses and SSIDs are
-replaced with `[redacted]` before it lands in this repo, because the repo is published. The
-unredacted run lives on the machine under `~/Documents/`; the sed that performs the
-redaction is documented at the top of the script. Every line below is command output —
+Regenerate with `scripts/hardware-check.sh` — read-only, ~3 s, 14 sections (the redaction
+self-test that closes the output is not one of them). This file is the **redacted** copy: disk
+serial numbers, MAC addresses, IP addresses, SSIDs and the machine-id are replaced with
+`[redacted]` before it lands in this repo, because the repo is published. The unredacted run
+lives on the machine under `~/Documents/`; the rule set is `REDACT_SED` at the top of the
+script (`scripts/hardware-check.sh --print-redact-sed` prints it), and the self-test block at
+the end proves it still blanks every identifier shape. Every line below is command output —
 nothing here is inferred or remembered.
 
-**Corrected 2026-10-11.** The documented sed did not redact IP addresses at all. Its `inet6? `
-alternative carried its own trailing space, so that branch required `inet␣␣ADDR` (two spaces)
-and never matched anything; and neither it nor the MAC branch could match `ip -br` or
-`bluetoothctl` shapes, which have no `inet` / `link/ether` anchor. Because of that this file
-leaked six IP addresses, four link-layer MACs and the Bluetooth controller MAC. Those values
-are `[redacted]` here **by hand**, and the sed in `scripts/hardware-check.sh` is fixed so a
-regeneration cannot reintroduce them. Two things to know when reading the blocks below: the
-Network and Bluetooth blocks are hand-redacted rather than purely machine-generated, and one
-command echo in the `iw dev` block is visibly mangled because the `SSID` rule fired on the
-command text itself instead of on output.
+The machine-id is on that list for a reason worth keeping: Limine names its kernel-staging
+directory `/boot/<machine-id>/` and records the same value in `/boot/limine.conf`, so an
+unredacted `/boot` listing identifies this machine by itself. A labelled-only rule missed
+exactly that until 2026-10-17; the context-free 32-hex rule covers it. Do not remove that rule,
+and do not reinstate the older sed (see the top of `scripts/hardware-check.sh`).
 
-The machine-id is redacted **by hand** too, and for a specific reason: it is a stable identifier of
-this machine, and Limine names its kernel-staging directory after it, so leaving it would have
-re-identified the redacted `/boot` listing above. The documented sed now carries a
-`Machine ID` / `Boot ID` rule, so a regeneration redacts it automatically.
-
-Generated: 2026-10-07T22:15:48-05:00 · machine cachyos-x8664 · kernel 7.2.9-1-cachyos · CachyOS on a Gigabyte B550 AORUS ELITE AX V2
+Generated: 2026-10-17T13:22:42-05:00 · machine cachyos-x8664 · kernel 7.2.9-2-cachyos · CachyOS on a Gigabyte B550 AORUS ELITE AX V2
 
 ## System
 
@@ -32,23 +24,23 @@ $ hostnamectl
  Static hostname: cachyos-x8664
        Icon name: computer-desktop
          Chassis: desktop 🖥️
-      Machine ID: [redacted]
-         Boot ID: e3c262feaefd4182ab2da0a89963984d
+      Machine ID [redacted]
+         Boot ID [redacted]
     Product UUID [redacted]
 Operating System: CachyOS
-          Kernel: Linux 7.2.9-1-cachyos
+          Kernel: Linux 7.2.9-2-cachyos
     Architecture: x86-64
  Hardware Vendor: Gigabyte Technology Co., Ltd.
   Hardware Model: B550 AORUS ELITE AX V2
  Hardware Serial: [redacted]
 Firmware Version: FId
    Firmware Date: Tue 2026-08-18
-    Firmware Age: 1month 2w 6d
+    Firmware Age: 1month 4w 2d
 ```
 ```text
 $ uptime -p; who -b 2>/dev/null
-up 1 day, 13 hours, 0 minute
-         system boot  2026-10-06 09:15
+up 3 days, 1 hour, 5 minutes
+         system boot  2026-10-14 12:17
 ```
 ```text
 $ timedatectl | head -8
@@ -59,9 +51,9 @@ Warning: The system is configured to read the RTC time in the local time zone.
          time is never updated, it relies on external facilities to maintain it.
          If at all possible, use RTC in UTC by calling
          'timedatectl set-local-rtc 0'.
-               Local time: Wed 2026-10-07 22:15:48 CDT
-           Universal time: Thu 2026-10-08 03:15:48 UTC
-                 RTC time: Wed 2026-10-07 22:15:44
+               Local time: Sat 2026-10-17 13:22:42 CDT
+           Universal time: Sat 2026-10-17 18:22:42 UTC
+                 RTC time: Sat 2026-10-17 13:22:38
                 Time zone: America/Chicago (CDT, -0500)
 System clock synchronized: yes
               NTP service: active
@@ -153,9 +145,9 @@ SecureBoot efivar present; last byte (1 = enabled, 0 = disabled): 0
 ```
 ```text
 $ sudo -n ls -la /boot | head -14
-total 2152
+total 2256
 drwx------ 6 root root  16384 Dec 31  1969 .
-dr-xr-xr-x 1 root root    150 Sep 23 15:21 ..
+dr-xr-xr-x 1 root root    150 Oct  7 22:37 ..
 -rwx------ 1 root root 307200 Sep 17 09:27 amd-ucode.img
 drwx------ 5 root root   4096 Aug 29 22:28 [redacted]
 drwx------ 4 root root   4096 Aug 29 17:22 EFI
@@ -189,7 +181,7 @@ Socket(s):                               1
 Stepping:                                2
 Microcode version:                       0xa201213
 Frequency boost:                         enabled
-CPU(s) scaling MHz:                      63%
+CPU(s) scaling MHz:                      59%
 CPU max MHz:                             4954.5649
 CPU min MHz:                             567.0890
 Virtualization:                          AMD-V
@@ -264,7 +256,7 @@ grep: warning: stray \ before t
 ```
 ```text
 $ cat /proc/cmdline
-quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID [redacted]
+quiet splash rw rootflags=subvol=/@ root=UUID [redacted]
 ```
 
 ## Memory
@@ -309,16 +301,16 @@ $ sudo -n dmidecode -t memory 2>/dev/null | grep -e "Maximum Capacity" -e "Numbe
 ```text
 $ free -h
                total        used        free      shared  buff/cache   available
-Mem:            31Gi        16Gi       1.9Gi       308Mi        13Gi        14Gi
-Swap:           31Gi        15Gi        15Gi
+Mem:            31Gi        13Gi       7.2Gi       674Mi        11Gi        17Gi
+Swap:           31Gi       1.2Gi        30Gi
 ```
 ```text
 $ swapon --show; echo; zramctl 2>/dev/null | head -4
-NAME       TYPE       SIZE  USED PRIO
-/dev/zram0 partition 31.3G 15.4G  100
+NAME       TYPE       SIZE USED PRIO
+/dev/zram0 partition 31.3G 1.2G  100
 
-NAME       ALGORITHM DISKSIZE  DATA COMPR TOTAL STREAMS MOUNTPOINT
-/dev/zram0 zstd         31.3G 15.1G  6.8G  6.9G         [SWAP]
+NAME       ALGORITHM DISKSIZE DATA  COMPR  TOTAL STREAMS MOUNTPOINT
+/dev/zram0 zstd         31.3G 1.1G 270.4M 280.6M         [SWAP]
 ```
 
 ## GPU
@@ -332,13 +324,13 @@ $ lspci -nnk | grep -A3 -i "VGA compatible\|3D controller"
 ```
 ```text
 $ cat /proc/driver/nvidia/version 2>/dev/null | head -3
-NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  615.71.09  Release Build  (notroot@)  Sat Oct  3 18:52:37 UTC 2026
+NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  615.78.08  Release Build  (notroot@)  Fri Oct  9 15:54:18 UTC 2026
 GCC version:  Selected multilib: .;@m64
 ```
 ```text
 $ nvidia-smi --query-gpu=name,driver_version,vbios_version,memory.total,memory.used,temperature.gpu,power.draw,power.limit,clocks.sm,clocks.mem,utilization.gpu,pstate --format=csv 2>/dev/null
 name, driver_version, vbios_version, memory.total [MiB], memory.used [MiB], temperature.gpu, power.draw [W], power.limit [W], clocks.current.sm [MHz], clocks.current.memory [MHz], utilization.gpu [%], pstate
-NVIDIA GeForce RTX 3060, 615.71.09, 94.06.2F.00.9A, 12288 MiB, 1003 MiB, 49, 41.58 W, 170.00 W, 1807 MHz, 7501 MHz, 1 %, P0
+NVIDIA GeForce RTX 3060, 615.78.08, 94.06.2F.00.9A, 12288 MiB, 1695 MiB, 39, 44.22 W, 170.00 W, 1957 MHz, 7501 MHz, 1 %, P0
 ```
 ```text
 $ command -v vulkaninfo >/dev/null && (vulkaninfo --summary 2>/dev/null | head -14) || echo "vulkaninfo not installed"
@@ -365,10 +357,10 @@ direct rendering: Yes
 Memory info (GL_NVX_gpu_memory_info):
     Dedicated video memory: 12288 MB
     Total available memory: 12288 MB
-    Currently available dedicated video memory: 10953 MB
+    Currently available dedicated video memory: 10250 MB
 OpenGL vendor string: NVIDIA Corporation
 OpenGL renderer string: NVIDIA GeForce RTX 3060/PCIe/SSE2
-OpenGL core profile version string: 4.6.0 NVIDIA 615.71.09
+OpenGL core profile version string: 4.6.0 NVIDIA 615.78.08
 OpenGL core profile shading language version string: 4.60 NVIDIA
 OpenGL core profile context flags: (none)
 ```
@@ -381,7 +373,7 @@ NAME          SIZE TYPE  FSTYPE            FSVER  MOUNTPOINTS ROTA MODEL
 sda          10.9T disk                                          1 ST12000DM0007-2GR116
 ├─sda1         16M part                                          1 
 ├─sda2        5.5T part  ntfs                                    1 
-└─sda3        5.5T part  btrfs                                   1 
+└─sda3        5.5T part  btrfs                    /mnt/12TB_2    1 
 sdb           2.7T disk                                          1 Hitachi HDS5C3030ALA630
 ├─sdb1        2.4G part  linux_raid_member 0.90.0                1 
 ├─sdb2          2G part  linux_raid_member 0.90.0                1 
@@ -395,8 +387,8 @@ nvme1n1     238.5G disk                                          0 INTEL SSDPEKK
 └─nvme1n1p2 234.5G part  btrfs                    /var/tmp       0 
                                                   /var/log         
                                                   /var/cache       
-                                                  /srv             
                                                   /home            
+                                                  /srv             
                                                   /root            
                                                   /                
 nvme0n1     931.5G disk                                          0 Samsung SSD 980 PRO 1TB
@@ -404,7 +396,7 @@ nvme0n1     931.5G disk                                          0 Samsung SSD 9
 ├─nvme0n1p2   775M part  ntfs                                    0 
 ├─nvme0n1p3   100M part  vfat              FAT32                 0 
 ├─nvme0n1p4    16M part                                          0 
-└─nvme0n1p5 443.1G part  btrfs                                   0 
+└─nvme0n1p5 443.1G part                                          0 
 ```
 ```text
 $ cat /proc/mdstat 2>/dev/null || echo "no md arrays"
@@ -426,7 +418,7 @@ $ command -v mdadm >/dev/null && (sudo -n mdadm --detail /dev/md127 2>/dev/null 
      Total Devices : 1
        Persistence : Superblock is persistent
 
-       Update Time : Mon Jan  6 09:20:59 2025
+       Update Time : Wed Oct 14 12:16:58 2026
              State : clean, degraded 
     Active Devices : 1
    Working Devices : 1
@@ -437,68 +429,70 @@ Consistency Policy : resync
 
               Name : DiskStation:2
               UUID [redacted]
-            Events : 4421145
+            Events : 4421153
 
     Number   Major   Minor   RaidDevice State
 ```
 ```text
 $ df -hT -x tmpfs -x devtmpfs -x efivarfs
 Filesystem     Type   Size  Used Avail Use% Mounted on
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /root
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /home
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /srv
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /var/cache
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /var/log
-/dev/nvme1n1p2 btrfs  235G  190G   42G  83% /var/tmp
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /root
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /srv
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /home
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /var/cache
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /var/log
+/dev/nvme1n1p2 btrfs  235G  205G   28G  89% /var/tmp
 /dev/nvme1n1p1 vfat   4.0G  1.9G  2.2G  47% /boot
+/dev/sda3      btrfs  5.5T  194G  5.3T   4% /mnt/12TB_2
 ```
 ```text
 $ findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS -t btrfs,vfat,ext4,swap,none 2>/dev/null | head -14
-TARGET       SOURCE                  FSTYPE OPTIONS
-/            /dev/nvme1n1p2[/@]      btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/@
-├─/root      /dev/nvme1n1p2[/@root]  btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=258,subvol=/@root
-├─/home      /dev/nvme1n1p2[/@home]  btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/@home
-├─/srv       /dev/nvme1n1p2[/@srv]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=259,subvol=/@srv
-├─/var/cache /dev/nvme1n1p2[/@cache] btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=260,subvol=/@cache
-├─/var/log   /dev/nvme1n1p2[/@log]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=262,subvol=/@log
-├─/var/tmp   /dev/nvme1n1p2[/@tmp]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=261,subvol=/@tmp
-└─/boot      /dev/nvme1n1p1          vfat   rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
+TARGET        SOURCE                  FSTYPE OPTIONS
+/             /dev/nvme1n1p2[/@]      btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/@
+├─/mnt/12TB_2 /dev/sda3               btrfs  ro,relatime,space_cache=v2,subvolid=5,subvol=/
+├─/srv        /dev/nvme1n1p2[/@srv]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=259,subvol=/@srv
+├─/root       /dev/nvme1n1p2[/@root]  btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=258,subvol=/@root
+├─/home       /dev/nvme1n1p2[/@home]  btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/@home
+├─/var/cache  /dev/nvme1n1p2[/@cache] btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=260,subvol=/@cache
+├─/var/log    /dev/nvme1n1p2[/@log]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=262,subvol=/@log
+├─/var/tmp    /dev/nvme1n1p2[/@tmp]   btrfs  rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=261,subvol=/@tmp
+└─/boot       /dev/nvme1n1p1          vfat   rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
 ```
 ```text
 $ sudo -n btrfs filesystem usage / 2>/dev/null | head -8
 Overall:
     Device size:		 234.47GiB
-    Device allocated:		 205.02GiB
-    Device unallocated:		  29.45GiB
+    Device allocated:		 216.02GiB
+    Device unallocated:		  18.45GiB
     Device missing:		     0.00B
     Device slack:		     0.00B
-    Used:			 189.29GiB
-    Free (estimated):		  41.33GiB	(min: 26.60GiB)
+    Used:			 203.90GiB
+    Free (estimated):		  27.06GiB	(min: 17.84GiB)
 ```
 ```text
 $ sudo -n btrfs subvolume list / 2>/dev/null | head -12
-ID 256 gen 107561 top level 5 path @
-ID 257 gen 107562 top level 5 path @home
-ID 258 gen 68232 top level 5 path @root
+ID 256 gen 129517 top level 5 path @
+ID 257 gen 129518 top level 5 path @home
+ID 258 gen 122830 top level 5 path @root
 ID 259 gen 25 top level 5 path @srv
-ID 260 gen 105228 top level 5 path @cache
-ID 261 gen 107562 top level 5 path @tmp
-ID 262 gen 107562 top level 5 path @log
+ID 260 gen 128456 top level 5 path @cache
+ID 261 gen 129518 top level 5 path @tmp
+ID 262 gen 129518 top level 5 path @log
 ID 263 gen 27 top level 256 path var/lib/portables
 ID 264 gen 27 top level 256 path var/lib/machines
-ID 265 gen 104627 top level 256 path .snapshots
+ID 265 gen 122886 top level 256 path .snapshots
 ID 271 gen 34 top level 265 path .snapshots/6/snapshot
-ID 380 gen 48828 top level 265 path .snapshots/115/snapshot
+ID 396 gen 68254 top level 265 path .snapshots/131/snapshot
 ```
 ```text
 $ sudo -n snapper -c root list --columns number,type,date,description 2>/dev/null | tail -6
-160 │ post   │ Tue 06 Oct 2026 11:20:40 AM CDT │ ccache cups hiredis libcups libcupsfilters libx11 sccache xorgproto
-161 │ pre    │ Tue 06 Oct 2026 11:31:06 AM CDT │ pacman -Syu --noconfirm mold ninja hyperfine
-162 │ post   │ Tue 06 Oct 2026 11:31:07 AM CDT │ hyperfine mold ninja
-163 │ pre    │ Tue 06 Oct 2026 03:53:19 PM CDT │ pacman -U --noconfirm /tmp/MarkdownBlaze-1.0.23-1-x86_64.pkg.tar.zst
-164 │ post   │ Tue 06 Oct 2026 03:53:20 PM CDT │ MarkdownBlaze
-165 │ single │ Tue 06 Oct 2026 11:19:58 PM CDT │ pre: document /usr/local/bin shims
+179 │ pre    │ Tue 13 Oct 2026 01:09:19 AM CDT │ /usr/bin/shelly upgrade all --ui-mode
+180 │ post   │ Tue 13 Oct 2026 01:09:34 AM CDT │ attica baloo bluez-qt bpf breeze-icons cpupower frameworkintegration fre
+181 │ pre    │ Tue 13 Oct 2026 01:14:15 AM CDT │ /usr/bin/shelly upgrade all --ui-mode
+182 │ post   │ Tue 13 Oct 2026 01:14:18 AM CDT │ netgen-git
+183 │ pre    │ Wed 14 Oct 2026 12:14:52 PM CDT │ pacman -Syu --noconfirm
+184 │ post   │ Wed 14 Oct 2026 12:15:02 PM CDT │ ccache chromium electron43 electron44 fastfetch gnome-maps gnome-setting
 ```
 ```text
 $ for d in $(lsblk -dno NAME,TYPE | awk "\$2==\"disk\"{print \$1}"); do echo "== /dev/$d"; sudo -n smartctl -i -H -A "/dev/$d" 2>/dev/null | grep -i -e "Model Number" -e "Firmware" -e "Serial Number" -e "SMART overall" -e "Temperature" -e "Percentage Used" -e "Data Units Written" -e "Power On Hours" -e "Available Spare" -e "Media and Data" | head -12; done
@@ -506,13 +500,13 @@ $ for d in $(lsblk -dno NAME,TYPE | awk "\$2==\"disk\"{print \$1}"); do echo "==
 Serial Number: [redacted]
 Firmware Version: DN01
 SMART overall-health self-assessment test result: PASSED
-190 Airflow_Temperature_Cel 0x0022   050   043   040    Old_age   Always       -       50 (Min/Max 49/50)
-194 Temperature_Celsius     0x0022   050   057   000    Old_age   Always       -       50 (0 19 0 0 0)
+190 Airflow_Temperature_Cel 0x0022   058   043   040    Old_age   Always       -       42 (Min/Max 42/46)
+194 Temperature_Celsius     0x0022   042   057   000    Old_age   Always       -       42 (0 19 0 0 0)
 == /dev/sdb
 Serial Number: [redacted]
 Firmware Version: MEAOA580
 SMART overall-health self-assessment test result: PASSED
-194 Temperature_Celsius     0x0002   113   113   000    Old_age   Always       -       53 (Min/Max 13/59)
+194 Temperature_Celsius     0x0002   130   130   000    Old_age   Always       -       46 (Min/Max 13/59)
 == /dev/sdc
 == /dev/zram0
 == /dev/nvme1n1
@@ -520,12 +514,12 @@ Model Number:                       INTEL SSDPEKKW256G7
 Serial Number: [redacted]
 Firmware Version:                   PSF100C
 SMART overall-health self-assessment test result: PASSED
-Temperature:                        35 Celsius
+Temperature:                        26 Celsius
 Available Spare:                    100%
 Available Spare Threshold:          10%
 Percentage Used:                    13%
-Data Units Written:                 65,479,647 [33.5 TB]
-Power On Hours:                     38,280
+Data Units Written:                 67,414,320 [34.5 TB]
+Power On Hours:                     38,503
 Media and Data Integrity Errors:    1
 Warning  Comp. Temperature Time:    145
 == /dev/nvme0n1
@@ -533,12 +527,12 @@ Model Number:                       Samsung SSD 980 PRO 1TB
 Serial Number: [redacted]
 Firmware Version:                   5B2QGXA7
 SMART overall-health self-assessment test result: PASSED
-Temperature:                        41 Celsius
+Temperature:                        35 Celsius
 Available Spare:                    100%
 Available Spare Threshold:          10%
 Percentage Used:                    3%
-Data Units Written:                 34,336,181 [17.5 TB]
-Power On Hours:                     1,981
+Data Units Written:                 34,336,312 [17.5 TB]
+Power On Hours:                     2,152
 Media and Data Integrity Errors:    0
 Warning  Comp. Temperature Time:    0
 ```
@@ -565,20 +559,20 @@ $ kscreen-doctor -o 2>/dev/null | head -40 || echo "kscreen-doctor unavailable f
 	[01;32mpriority 1[0;0m
 	[01;33mHDMI[0;0m
 	[01;33mreplication source:[0;0m0
-	[01;34mModes: [0;0m 1:3440x1440@59.97!  2:3840x2160@120.00  3:3840x2160@119.88  4:3840x2160@59.94  5:3840x2160@60.00  6:3840x2160@50.00  7:[01;32m3440x1440@120.00*[0;0m  8:3440x1440@99.98  9:2560x1440@120.00  10:1920x1080@119.88  11:1920x1080@60.00  12:1920x1080@59.94  13:1920x1080@50.00  14:1680x1050@59.95  15:1280x1024@75.03  16:1280x1024@60.02  17:1440x900@59.89  18:1280x960@60.00  19:1280x800@59.81  20:1152x864@75.00  21:1280x720@119.88  22:1280x720@60.00  23:1280x720@59.94  24:1280x720@50.00  25:1024x768@75.03  26:1024x768@60.00  27:800x600@75.00  28:800x600@60.32  29:720x576@50.00  30:720x480@59.94  31:640x480@75.00  32:640x480@59.94  33:640x480@59.93 
+	[01;34mModes: [0;0m 1:[01;32m3440x1440@59.97*[0;0m!  2:3840x2160@60.00  3:3840x2160@59.94  4:3840x2160@50.00  5:2560x1440@120.00  6:1920x1080@119.88  7:1920x1080@100.00  8:1920x1080@60.00  9:1920x1080@59.94  10:1920x1080@50.00  11:1680x1050@59.95  12:1280x1024@75.03  13:1280x1024@60.02  14:1440x900@59.89  15:1280x960@60.00  16:1280x800@59.81  17:1152x864@75.00  18:1280x720@119.88  19:1280x720@60.00  20:1280x720@59.94  21:1280x720@50.00  22:1024x768@75.03  23:1024x768@60.00  24:800x600@75.00  25:800x600@60.32  26:720x576@50.00  27:720x480@59.94  28:640x480@75.00  29:640x480@59.94  30:640x480@59.93 
 [01;33m	Custom modes:[0;0m None
 [01;33m	Geometry: [0;0m0,0 3440x1440
 [01;33m	Scale: [0;0m1
 [01;33m	Rotation: [0;0m1
 [01;33m	Overscan: [0;0m0
-[01;33m	Vrr: [0;0mNever
+[01;33m	Vrr: [0;0mincapable
 [01;33m	RgbRange: [0;0munknown
 [01;33m	HDR: [0;0mdisabled
 [01;33m	Wide Color Gamut: [0;0mdisabled
 [01;33m	ICC profile: [0;0mnone
 [01;33m	Color profile source: [0;0msRGB
 [01;33m	Color power preference: [0;0mprefer efficiency and performance
-[01;33m	Brightness control: [0;0msupported, set to 100% and dimming to 100%
+[01;33m	Brightness control: [0;0munsupported
 [01;33m	DDC/CI: [0;0mallowed
 [01;33m	Color resolution: unknown
 [01;33m	Allow EDR: [0;0munsupported
@@ -607,7 +601,7 @@ docker0          DOWN           [redacted] <NO-CARRIER,BROADCAST,MULTICAST,UP>
 lo               UNKNOWN        [redacted] [redacted] 
 eno1             UP             [redacted] [redacted] 
 wlan0            DOWN           
-docker0          DOWN           [redacted] [redacted] 
+docker0          DOWN           [redacted] 
 ```
 ```text
 $ lspci -nn | grep -i -e ethernet -e "network controller"
@@ -625,7 +619,7 @@ $ rfkill list 2>/dev/null | head -8; echo; iw dev 2>/dev/null | grep -i -e Inter
 1: phy0: Wireless LAN
 	Soft blocked: yes
 	Hard blocked: no
-14: hci0: Bluetooth
+19: hci0: Bluetooth
 	Soft blocked: no
 	Hard blocked: no
 
@@ -658,16 +652,16 @@ $ lspci -nn | grep -i audio
 ```text
 $ aplay -l 2>/dev/null | head -12
 **** List of PLAYBACK Hardware Devices ****
-card 1: NVidia [HDA NVidia], device 3: HDMI 0 [DELL S3425DW]
+card 0: NVidia [HDA NVidia], device 3: HDMI 0 [DELL S3425DW]
   Subdevices: 1/1
   Subdevice #0: subdevice #0
-card 1: NVidia [HDA NVidia], device 7: HDMI 1 [HDMI 1]
+card 0: NVidia [HDA NVidia], device 7: HDMI 1 [HDMI 1]
   Subdevices: 1/1
   Subdevice #0: subdevice #0
-card 1: NVidia [HDA NVidia], device 8: HDMI 2 [HDMI 2]
+card 0: NVidia [HDA NVidia], device 8: HDMI 2 [HDMI 2]
   Subdevices: 1/1
   Subdevice #0: subdevice #0
-card 1: NVidia [HDA NVidia], device 9: HDMI 3 [HDMI 3]
+card 0: NVidia [HDA NVidia], device 9: HDMI 3 [HDMI 3]
   Subdevices: 1/1
 ```
 ```text
@@ -732,13 +726,18 @@ Bus 001 Device 003: ID 05e3:0608 Genesys Logic, Inc. Hub
 Bus 001 Device 004: ID 048d:5702 Integrated Technology Express, Inc. RGB LED Controller
 Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
 Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
-Bus 003 Device 062: ID 05e3:0610 Genesys Logic, Inc. Hub
-Bus 003 Device 063: ID 28e9:30ad GDMicroelectronics B87 Keyboard
-Bus 003 Device 064: ID 2516:0141 Cooler Master Co., Ltd. MM720 Gaming Mouse
+Bus 003 Device 002: ID 1a40:0101 Terminus Technology Inc. Hub
+Bus 003 Device 004: ID 1a86:e229 QinHeng Electronics WCH UART TO KB-MS_V1.8
+Bus 003 Device 006: ID 1a86:7523 QinHeng Electronics CH340 serial converter
+Bus 003 Device 073: ID 05e3:0610 Genesys Logic, Inc. Hub
+Bus 003 Device 074: ID 05e3:0610 Genesys Logic, Inc. Hub
+Bus 003 Device 075: ID 28e9:30ad GDMicroelectronics B87 Keyboard
+Bus 003 Device 076: ID 2516:0141 Cooler Master Co., Ltd. MM720 Gaming Mouse
 Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
 Bus 004 Device 002: ID 154b:00d2 PNY USB 3.0 FD
-Bus 004 Device 043: ID 05e3:0626 Genesys Logic, Inc. Hub
-Bus 004 Device 044: ID 046d:085e Logitech, Inc. BRIO Ultra HD Webcam
+Bus 004 Device 055: ID 05e3:0626 Genesys Logic, Inc. Hub
+Bus 004 Device 056: ID 05e3:0626 Genesys Logic, Inc. Hub
+Bus 004 Device 057: ID 046d:085e Logitech, Inc. BRIO Ultra HD Webcam
 ```
 ```text
 $ lsusb -t | head -24
@@ -749,23 +748,23 @@ $ lsusb -t | head -24
     |__ Port 007: Dev 004, If 0, Class=Human Interface Device, Driver=usbhid, 12M
 /:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 10000M
 /:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
-    |__ Port 004: Dev 062, If 0, Class=Hub, Driver=hub/4p, 480M
-        |__ Port 002: Dev 063, If 0, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 002: Dev 063, If 1, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 002: Dev 063, If 2, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 002: Dev 063, If 3, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 003: Dev 064, If 0, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 003: Dev 064, If 1, Class=Human Interface Device, Driver=usbhid, 12M
-        |__ Port 003: Dev 064, If 2, Class=Human Interface Device, Driver=usbhid, 12M
+    |__ Port 004: Dev 002, If 0, Class=Hub, Driver=hub/4p, 480M
+        |__ Port 001: Dev 073, If 0, Class=Hub, Driver=hub/4p, 480M
+            |__ Port 004: Dev 074, If 0, Class=Hub, Driver=hub/4p, 480M
+                |__ Port 003: Dev 075, If 0, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 003: Dev 075, If 1, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 003: Dev 075, If 2, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 003: Dev 075, If 3, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 004: Dev 076, If 0, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 004: Dev 076, If 1, Class=Human Interface Device, Driver=usbhid, 12M
+                |__ Port 004: Dev 076, If 2, Class=Human Interface Device, Driver=usbhid, 12M
+        |__ Port 002: Dev 004, If 0, Class=Human Interface Device, Driver=usbhid, 12M
+        |__ Port 003: Dev 006, If 0, Class=Vendor Specific Class, Driver=ch341, 12M
 /:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 10000M
     |__ Port 003: Dev 002, If 0, Class=Mass Storage, Driver=usb-storage, 5000M
-    |__ Port 004: Dev 043, If 0, Class=Hub, Driver=hub/4p, 5000M
-        |__ Port 004: Dev 044, If 0, Class=Video, Driver=uvcvideo, 5000M
-        |__ Port 004: Dev 044, If 1, Class=Video, Driver=uvcvideo, 5000M
-        |__ Port 004: Dev 044, If 2, Class=Video, Driver=uvcvideo, 5000M
-        |__ Port 004: Dev 044, If 3, Class=Audio, Driver=snd-usb-audio, 5000M
-        |__ Port 004: Dev 044, If 4, Class=Audio, Driver=snd-usb-audio, 5000M
-        |__ Port 004: Dev 044, If 5, Class=Human Interface Device, Driver=usbhid, 5000M
+    |__ Port 004: Dev 055, If 0, Class=Hub, Driver=hub/4p, 5000M
+        |__ Port 001: Dev 057, If 0, Class=Video, Driver=uvcvideo, 5000M
+        |__ Port 001: Dev 057, If 1, Class=Video, Driver=uvcvideo, 5000M
 ```
 
 ## Sensors, thermals, power
@@ -774,19 +773,19 @@ $ lsusb -t | head -24
 $ if command -v sensors >/dev/null; then sudo -n sensors 2>/dev/null | head -46; else echo "lm_sensors not installed"; fi
 gigabyte_wmi-virtual-0
 Adapter: Virtual device
-temp1:        +38.0°C  
-temp2:        +37.0°C  
-temp3:        +54.0°C  
-temp4:        +40.0°C  
-temp5:        +41.0°C  
-temp6:        +45.0°C  
+temp1:        +27.0°C  
+temp2:        +26.0°C  
+temp3:        +44.0°C  
+temp4:        +30.0°C  
+temp5:        +30.0°C  
+temp6:        +34.0°C  
 
 nvme-pci-0400
 Adapter: PCI adapter
-Composite:    +40.9°C  (low  = -273.1°C, high = +81.8°C)
+Composite:    +34.9°C  (low  = -273.1°C, high = +81.8°C)
                        (crit = +84.8°C)
-Sensor 1:     +40.9°C  (low  = -273.1°C, high = +65261.8°C)
-Sensor 2:     +44.9°C  (low  = -273.1°C, high = +65261.8°C)
+Sensor 1:     +34.9°C  (low  = -273.1°C, high = +65261.8°C)
+Sensor 2:     +38.9°C  (low  = -273.1°C, high = +65261.8°C)
 
 acpitz-acpi-0
 Adapter: ACPI interface
@@ -795,17 +794,17 @@ temp2:        +16.8°C
 
 r8169_0_500:00-mdio-0
 Adapter: MDIO adapter
-temp1:        +44.5°C  (high = +120.0°C)
+temp1:        +34.0°C  (high = +120.0°C)
 
 k10temp-pci-00c3
 Adapter: PCI adapter
-Tctl:         +53.9°C  
-Tccd1:        +38.2°C  
-Tccd2:        +41.5°C  
+Tctl:         +44.5°C  
+Tccd1:        +52.5°C  
+Tccd2:        +31.0°C  
 
 nvme-pci-0100
 Adapter: PCI adapter
-Composite:    +34.9°C  (low  = -273.1°C, high = +69.8°C)
+Composite:    +25.9°C  (low  = -273.1°C, high = +69.8°C)
                        (crit = +79.8°C)
 
 ```
@@ -834,9 +833,6 @@ IOMMU groups: 22
 ```
 ```text
 $ sudo -n dmesg 2>/dev/null | grep -i -m3 -e "microcode" -e "Spectre" -e "MDS" | head -3
-[91145.992189] Spectre V2 : Update user space SMT mitigation: STIBP always-on
-[96711.748396] Spectre V2 : Update user space SMT mitigation: STIBP off
-[96711.817035] Spectre V2 : Update user space SMT mitigation: STIBP always-on
 ```
 
 ## Kernel modules and packages in play
@@ -845,8 +841,8 @@ $ sudo -n dmesg 2>/dev/null | grep -i -m3 -e "microcode" -e "Spectre" -e "MDS" |
 $ lsmod | grep -i -e "^nvidia" -e "^kvm" -e "^snd_hda" -e "^iwlwifi" -e "^r8169" -e "^usbhid" -e "^amdgpu" | head -14
 snd_hda_codec_alc662    20480  1
 snd_hda_codec_realtek_lib    73728  1 snd_hda_codec_alc662
-snd_hda_codec_generic   126976  2 snd_hda_codec_alc662,snd_hda_codec_realtek_lib
 snd_hda_codec_nvhdmi    16384  1
+snd_hda_codec_generic   126976  2 snd_hda_codec_alc662,snd_hda_codec_realtek_lib
 snd_hda_codec_hdmi     61440  1 snd_hda_codec_nvhdmi
 snd_hda_intel          69632  2
 kvm_amd               270336  0
@@ -854,20 +850,33 @@ snd_hda_codec         241664  6 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda
 snd_hda_core          159744  6 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec_alc662,snd_hda_codec,snd_hda_codec_realtek_lib
 kvm                  1564672  1 kvm_amd
 r8169                 180224  0
-nvidia_drm            184320  74
+nvidia_drm            184320  68
 nvidia_uvm           2383872  0
-nvidia_modeset       1908736  18 nvidia_drm
+nvidia_modeset       1916928  18 nvidia_drm
 ```
 ```text
 $ pacman -Q linux-cachyos linux-cachyos-lts linux-cachyos-nvidia-open nvidia-utils linux-firmware 2>/dev/null
-linux-cachyos 7.2.9-1
-linux-cachyos-lts 6.18.55-1
-linux-cachyos-nvidia-open 7.2.9-1
-nvidia-utils 615.71.09-1
+linux-cachyos 7.2.9-2
+linux-cachyos-lts 6.18.55-2
+linux-cachyos-nvidia-open 7.2.9-2
+nvidia-utils 615.78.08-2
 linux-firmware 1:20260916-1
 ```
 ```text
 $ rg -c . /proc/crypto >/dev/null 2>&1; ls /usr/lib/modules | head -6
-6.18.55-1-cachyos-lts
-7.2.9-1-cachyos
+6.18.55-2-cachyos-lts
+7.2.9-2-cachyos
+```
+
+Redaction self-test (synthetic identifiers; none may survive the rules above):
+
+```text
+  redacted  disk serial, labelled
+  redacted  GUID with dashes
+  redacted  MAC, anchorless shape
+  redacted  IPv4, anchorless shape
+  redacted  wireless network name, labelled
+  redacted  IPv4, bare inside a list
+  redacted  IPv6
+  redacted  machine-id, labelled and bare
 ```

@@ -20,7 +20,7 @@ Verified 2026-09-01, while debugging Chrome Canary:
   independently. See [chrome-fixes.md](chrome-fixes.md).
 
 Verified 2026-10-06 by [hardware-check.md](hardware-check.md) — regenerate with
-`scripts/hardware-check.sh` (read-only, 13 sections, ~3 s):
+`scripts/hardware-check.sh` (read-only, 14 sections, ~3 s):
 
 - CPU: AMD Ryzen 9 5900X, 12 cores / 24 threads, AM4, microcode current.
 - Memory: 2 × 16 GiB DDR4-3600, part **`CMK32GX4M2D3600C18`** (Corsair Vengeance LPX 2×16 kit),
@@ -43,6 +43,40 @@ Verified 2026-10-06 by [hardware-check.md](hardware-check.md) — regenerate wit
 - Network: Realtek RTL8125 2.5 GbE and an RTL8852CE 802.11ax adapter. Audio: AMD
   Starship/Matisse HD Audio plus the RTX 3060's HDMI audio.
 - Sensors expose **no fan RPMs** on any chip; CPU `Tctl` reads ~73 °C at idle.
+
+Peripherals the machine cannot name (verified 2026-10-17; **supplied by hand** — no
+`lsusb` or `lspci` entry identifies them):
+
+- **KVM dock: AV Access iDock P10** — a 2-PC, dual-monitor USB-C KVM docking station (GbE,
+  EDID emulation, 65 W PD, 5× USB-A, SD card, remote switch, 4K@60 Hz over HDMI and
+  DisplayPort). This machine sees only its silicon: three Genesys Logic hubs (`05e3:0610`,
+  `05e3:0626`) and two QinHeng serial bridges (`1a86:e229` "WCH UART TO KB-MS_V1.8" and
+  `1a86:7523` CH340) that carry the one keyboard and mouse across the two PCs. Two
+  consequences, both observed rather than inferred from the dock's spec sheet:
+  - The display now negotiates **3440×1440 @ 59.97 Hz** with `Vrr: incapable` and
+    `Brightness control: unsupported`, where a direct connection reported 3440×1440 @ 120 Hz
+    with both supported. The KVM's emulated EDID caps the link.
+  - Switching KVM inputs tears the NVIDIA HDMI audio device down and re-adds it. That is the
+    recurring `spa.alsa: … poll fd error/hangup (card removed?)` in the journal, and the reason
+    KDE's volume applet holds a dead node (`No object for name "…hdmi-stereo" returning
+    nullptr`). The "Audio/PipeWire path" candidate in
+    [plasmashell-wedge.md](plasmashell-wedge.md) is this, not a plasmashell defect.
+- Monitor: **Dell S3425DW** (3440×1440, 2 × 5 W speakers). Its speakers are this machine's only
+  connected audio output — every analog jack on the ALC897 reports nothing plugged in, so the
+  onboard card idles on its S/PDIF profile and WirePlumber defaults to the monitor over HDMI.
+- Keyboard (`28e9:30ad`), mouse (`2516:0141`) and webcam (`046d:085e`) enumerate behind Genesys
+  hubs in the same tree, consistent with the dock; nothing distinguishes its hubs from the
+  monitor's by name.
+
+Storage drift since the 2026-10-06 survey (from the 2026-10-17 run; `nvmeXnY` labels are a
+per-boot snapshot, so match by model, not name):
+
+- The 443 GB btrfs partition on the Samsung 980 PRO has **no filesystem now** — `blkid` returns
+  only a PARTUUID. Its contents were rescued to `~/Documents/rescued-nvme1n1p5-2026-10-11/`.
+- `sda3` (12 TB IronWolf, btrfs) is mounted **read-only** at `/mnt/12TB_2`, and **not via
+  `/etc/fstab`**, so the mount does not survive a reboot.
+- Root (`nvme1n1p2`) is at **89 %** — 28 GiB free — against the cache budget in
+  [build-caches.md](build-caches.md).
 
 ## Session
 
@@ -104,9 +138,10 @@ pacman operations. The `plasma-meta` install on 2026-08-31 produced snapshot
 
 ## Local files outside package management
 
-Four files live in `/usr/local/bin`, and **no package owns any of them**. The first three
+Five files live in `/usr/local/bin`, and **no package owns any of them**. The first three
 shadow or wrap system commands, since this directory precedes `/usr/bin` in PATH; the
-fourth is unique to this machine. Nothing tracked them before the 2026-10-06 review. They are listed here because an unowned shim has no
+rest are unique to this machine, and the last is **temporary** (it exists only for the
+pre-rebuild boot loop and must be removed after it). Nothing tracked them before the 2026-10-06 review. They are listed here because an unowned shim has no
 lifecycle: pacman will not update it, will not notice when it becomes obsolete, and will
 not mention it if its behaviour quietly changes.
 
@@ -115,6 +150,8 @@ not mention it if its behaviour quietly changes.
 /usr/local/bin/remove-nvidia                legacy name; clears VM guest packages (no-op today)
 /usr/local/bin/MarkdownBlaze                wrapper for the MarkdownBlaze package (expires)
 /usr/local/bin/plasmashell-wedge-watch.sh   panel-wedge watchdog (keep; source in plasmashell-watch/)
+/usr/local/bin/boot-capture.sh              reboot-loop capture (TEMPORARY; source in scripts/, undo in
+                                            customizations.md — remove when the loop is over)
 ```
 
 - **`mkinitcpio`** — runs the real `/usr/bin/mkinitcpio "$@"`, then for `-P`, `-p`,

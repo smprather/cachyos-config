@@ -1,36 +1,61 @@
 #!/usr/bin/env bash
 # Full hardware check for this machine. READ-ONLY: every command only queries.
 #
-#   scripts/hardware-check.sh > /tmp/hardware-check.md
+#   scripts/hardware-check.sh > /tmp/hw-raw.md                   # full run, unredacted
+#   scripts/hardware-check.sh --print-redact-sed                # print the redaction rule set
 #
-# The output identifies the machine and its owner (disk serials, MAC addresses,
-# IP addresses, SSIDs). It is fine locally; redact before publishing anywhere:
+# The output identifies the machine and its owner (disk serials, MAC addresses, IP addresses,
+# SSIDs, machine-id). It is fine locally; redact before publishing anywhere:
 #
-#   sed -E 's/^(.*(Serial Number|serial)[^:]*:).*/\1 [redacted]/I; \
-#           s/(link\/ether|permaddr) [0-9a-fA-F:]+/\1 [redacted]/g; \
-#           s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/[redacted]/g; \
-#           s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g; \
-#           s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g; \
-#           s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g; \
-#           s/(Machine|Boot) ID[=: ]+[0-9a-fA-F-]+/\1 ID [redacted]/Ig; \
-#           s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig' full.md > public.md
+#   scripts/hardware-check.sh > /tmp/hw-raw.md
+#   sed -E "$(scripts/hardware-check.sh --print-redact-sed)" /tmp/hw-raw.md > hardware-check.md
+#
+# The rules live in REDACT_SED below -- one source of truth, exercised by the self-test at the
+# end of every run, rather than retyped into a comment where it can rot. What each rule is for:
+#
+#   Serial Number        labelled; smartctl / dmidecode disk serials, case-insensitive.
+#   link/ether, permaddr, MAC anywhere   the `ip -br link` shape has no `link/ether` literal,
+#                        hence the context-free "six colon-separated hex pairs" rule beside it.
+#   inet / inet6, IPv4, IPv6   likewise anchorless: `ip -br addr` carries neither literal.
+#   Machine/Boot ID      labelled form only -- see the 32-hex rule for the unlabelled one.
+#   SSID / UUID / PARTUUID   labelled.
+#   32 hex, anywhere     the machine-id when nothing labels it: Limine names its kernel-staging
+#                        directory `/boot/<machine-id>/` and records the same value in
+#                        `/boot/limine.conf`, so an unredacted `/boot` listing identifies this
+#                        machine on its own. Added 2026-10-17, after a regeneration republished
+#                        it because the labelled rule above could not see it. The dashes in UUIDs
+#                        and GPT GUIDs keep those out of its way.
 #
 # Do NOT reinstate the older form of this sed. It did not redact IP addresses at all: its
 # `inet6? ` alternative carried its own trailing space, so that branch demanded two spaces
-# between `inet` and the address and never matched real output. Neither branch could match
-# `ip -br` or `bluetoothctl` shapes either, which carry no `inet` / `link/ether` anchor. That
-# leaked six IPs, four link-layer MACs and a Bluetooth MAC into the published copy of this file.
-# Hence the context-free MAC rule above: six colon-separated hex pairs, redacted anywhere.
-# Without it, `ip -br link` and `bluetoothctl show` output stays untouched.
+# between `inet` and the address and never matched real output. That leaked six IPs and a
+# Bluetooth controller MAC into the published copy of this file. Equally, do not drop a rule:
+# the self-test at the end of the run is what decides whether the set is still complete.
 #
-# hardware-check.md in this repo is the redacted copy of the 2026-10-06 run; its network and
-# Bluetooth blocks were hand-redacted on 2026-10-11 because of the above, as was the machine-id
-# (a stable identifier of this machine, and the name Limine gives its kernel-staging directory).
-# See the note in it.
+# hardware-check.md in this repo is the redacted copy of the 2026-10-17 run; its network,
+# Bluetooth and machine-id values are machine-redacted, not hand-edited.
 #
 # shellcheck disable=SC2016  # Every single-quoted string below is a script handed to `sh -c`
 #   on purpose, so its $vars must expand *inside*. File-wide, so it must precede all code.
 set -u
+
+# The redaction rule set: `--print-redact-sed` prints exactly this, and the self-test at the end
+# of the run pipes synthetic identifiers through it. Keep it the only copy of the rules.
+REDACT_SED='s/^(.*(Serial Number|serial)[^:]*:).*/\1 [redacted]/I;
+s/(link\/ether|permaddr) [0-9a-fA-F:]+/\1 [redacted]/g;
+s/([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/[redacted]/g;
+s/(inet6?) [0-9a-fA-F:.]+/\1 [redacted]/g;
+s/[0-9]{1,3}(\.[0-9]{1,3}){3}(\/[0-9]{1,2})?/[redacted]/g;
+s/[0-9a-fA-F:]*::[0-9a-fA-F:]*(\/[0-9]{1,3})?/[redacted]/g;
+s/(Machine|Boot) ID[=: ]+[0-9a-fA-F-]+/\1 ID [redacted]/Ig;
+s/(SSID|UUID|PARTUUID)[=: ]+[^ ]+/\1 [redacted]/Ig;
+s/\b[0-9a-fA-F]{32}\b/[redacted]/g'
+case "${1:-}" in
+  --print-redact-sed) printf '%s\n' "$REDACT_SED"; exit 0 ;;
+  "") ;;
+  *) printf 'usage: %s [--print-redact-sed]\n' "$0" >&2; exit 2 ;;
+esac
+
 sec() { printf '\n## %s\n\n' "$1"; }
 run() { printf '```text\n$ %s\n' "$*"; "$@" 2>&1; printf '```\n'; }
 runsh() { printf '```text\n$ %s\n' "$1"; sh -c "$1" 2>&1; printf '```\n'; }
@@ -38,12 +63,20 @@ runsh() { printf '```text\n$ %s\n' "$1"; sh -c "$1" 2>&1; printf '```\n'; }
 cat <<'HDR'
 # Full hardware check
 
-Regenerate with `scripts/hardware-check.sh` — read-only, ~3 s, 13 sections. This file is
-the **redacted** copy: disk serial numbers, MAC addresses, IP addresses and SSIDs are
-replaced with `[redacted]` before it lands in this repo, because the repo is published. The
-unredacted run lives on the machine under `~/Documents/`; the sed that performs the
-redaction is documented at the top of the script. Every line below is command output —
+Regenerate with `scripts/hardware-check.sh` — read-only, ~3 s, 14 sections (the redaction
+self-test that closes the output is not one of them). This file is the **redacted** copy: disk
+serial numbers, MAC addresses, IP addresses, SSIDs and the machine-id are replaced with
+`[redacted]` before it lands in this repo, because the repo is published. The unredacted run
+lives on the machine under `~/Documents/`; the rule set is `REDACT_SED` at the top of the
+script (`scripts/hardware-check.sh --print-redact-sed` prints it), and the self-test block at
+the end proves it still blanks every identifier shape. Every line below is command output —
 nothing here is inferred or remembered.
+
+The machine-id is on that list for a reason worth keeping: Limine names its kernel-staging
+directory `/boot/<machine-id>/` and records the same value in `/boot/limine.conf`, so an
+unredacted `/boot` listing identifies this machine by itself. A labelled-only rule missed
+exactly that until 2026-10-17; the context-free 32-hex rule covers it. Do not remove that rule,
+and do not reinstate the older sed (see the top of `scripts/hardware-check.sh`).
 HDR
 printf '\nGenerated: %s · machine %s · kernel %s · CachyOS on a Gigabyte B550 AORUS ELITE AX V2\n' \
   "$(date -Iseconds)" "$(hostnamectl --static 2>/dev/null)" "$(uname -r)"
@@ -137,3 +170,42 @@ sec "Kernel modules and packages in play"
 runsh 'lsmod | grep -i -e "^nvidia" -e "^kvm" -e "^snd_hda" -e "^iwlwifi" -e "^r8169" -e "^usbhid" -e "^amdgpu" | head -14'
 runsh 'pacman -Q linux-cachyos linux-cachyos-lts linux-cachyos-nvidia-open nvidia-utils linux-firmware 2>/dev/null'
 runsh 'rg -c . /proc/crypto >/dev/null 2>&1; ls /usr/lib/modules | head -6'
+
+# --- Redaction self-test --------------------------------------------------------------------
+# Tests the RULES against synthetic input, not "are there identifiers in the output" -- that
+# check passes vacuously for any identifier class this script never happens to collect, which
+# is the mistake the sibling premigration-inventory.sh documents. That script got its self-test
+# on 2026-10-11 after a leak shipped; this one had none until 2026-10-17, when an unlabelled
+# machine-id reached the published copy for exactly that reason. The exit status is the verdict.
+rc=0
+selftest_in='Serial Number: TESTSERIAL123
+UUID=deadbeef-0000-1111-2222-333333333333
+link/ether aa:bb:cc:dd:ee:ff
+inet 192.0.2.55/24
+SSID: TestNet
+198.51.100.7/24 2001:db8::5678/64
+Machine ID: 0123456789abcdef0123456789abcdef
+drwxr-xr-x 5 root root 4096 Aug 29 22:28 0123456789abcdef0123456789abcdef
+module_path: boot():/0123456789abcdef0123456789abcdef/linux-cachyos/initramfs'
+selftest_out="$(printf '%s\n' "$selftest_in" | sed -E "$REDACT_SED")"
+printf '\nRedaction self-test (synthetic identifiers; none may survive the rules above):\n\n'
+printf '```text\n'
+for pair in 'TESTSERIAL123|disk serial, labelled' \
+            'deadbeef-0000-1111-2222-333333333333|GUID with dashes' \
+            'aa:bb:cc:dd:ee:ff|MAC, anchorless shape' \
+            '192.0.2.55|IPv4, anchorless shape' \
+            'TestNet|wireless network name, labelled' \
+            '198.51.100.7|IPv4, bare inside a list' \
+            '2001:db8::5678|IPv6' \
+            '0123456789abcdef0123456789abcdef|machine-id, labelled and bare'; do
+  # The label is what gets published -- the fixture that was tested would itself be redacted
+  # by the very rules under test, and a reader still gets to see which shapes were covered.
+  if printf '%s' "$selftest_out" | grep -qF -- "${pair%%|*}"; then
+    printf '  FAIL      synthetic value survived the rules (%s)\n' "${pair#*|}"
+    rc=1
+  else
+    printf '  redacted  %s\n' "${pair#*|}"
+  fi
+done
+printf '```\n'
+exit "$rc"

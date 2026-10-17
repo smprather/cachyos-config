@@ -1,0 +1,582 @@
+# System benchmark — before
+
+Run 2026-10-17T14:13:48-05:00 · host cachyos-x8664 · kernel 7.2.9-2-cachyos · CachyOS on a Gigabyte B550 AORUS ELITE AX V2
+
+Every line below is command output, except `METRIC|` lines, which this script emits for
+`--diff`. fio numbers are MiB/s unless marked IOPS. Compare like with like: the load
+average, the power profile and the session state all move the CPU and GPU numbers.
+
+- Root device: `/dev/nvme1n1p2` ()
+- Free space on `/`: 25G
+- Load average: 0.12 0.18 0.90
+
+## System and session state
+
+```text
+$ hostnamectl | grep -vE "(Machine|Boot) ID|Product UUID" | head -6
+ Static hostname: cachyos-x8664
+       Icon name: computer-desktop
+         Chassis: desktop 🖥️
+Operating System: CachyOS
+          Kernel: Linux 7.2.9-2-cachyos
+    Architecture: x86-64
+```
+```text
+$ hostnamectl --static
+cachyos-x8664
+```
+```text
+$ uname -r; uptime -p; awk "{print \"load:\", \$1, \$2, \$3}" /proc/loadavg
+7.2.9-2-cachyos
+up 3 days, 1 hour, 56 minutes
+load: 0.12 0.18 0.90
+```
+```text
+$ powerprofilesctl get 2>/dev/null; cat /sys/devices/system/cpu/cpufreq/policy0/scaling_governor; cat /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference; cat /sys/devices/system/cpu/amd_pstate/status 2>/dev/null
+balanced
+powersave
+balance_performance
+active
+```
+```text
+$ cat /proc/driver/nvidia/version | head -1
+NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  615.78.08  Release Build  (notroot@)  Fri Oct  9 15:54:18 UTC 2026
+```
+```text
+$ pacman -Qqen | wc -l; pacman -Q linux-cachyos linux-cachyos-nvidia-open nvidia-utils fio sysbench vkmark 2>/dev/null
+329
+linux-cachyos 7.2.9-2
+linux-cachyos-nvidia-open 7.2.9-2
+nvidia-utils 615.78.08-2
+fio 3.42-1.1
+sysbench 1.0.20-2.1
+vkmark 1:2025.01-2.1
+```
+```text
+$ findmnt -no SOURCE,FSTYPE,OPTIONS /
+/dev/nvme1n1p2[/@] btrfs rw,noatime,compress=zstd:1,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/@
+```
+
+## Boot time
+
+```text
+$ systemd-analyze
+Startup finished in 10.469s (firmware) + 6.336s (loader) + 4.752s (kernel) + 2.886s (initrd) + 9.588s (userspace) = 34.033s 
+graphical.target reached after 9.587s in userspace.
+```
+METRIC|boot_total|34.033|s
+METRIC|boot_userspace|9.587|s
+```text
+$ systemd-analyze blame 2>/dev/null | head -5
+2min 20.462s plocate-updatedb.service
+     48.045s cachyos-rate-mirrors.service
+     12.749s systemd-tmpfiles-clean.service
+      4.999s NetworkManager-wait-online.service
+      4.838s dev-disk-by\x2dpath-pci\x2d0000:02:00.1\x2data\x2d4.0\x2dpart-by\x2dpartnum-3.device
+```
+
+## CPU — sysbench (integer, events/s)
+
+```text
+$ sysbench cpu --cpu-max-prime=20000 --time=15 --threads=1 run
+sysbench 1.0.20-1472a05 (using system LuaJIT 2.1.1720049189)
+
+Running the test with following options:
+Number of threads: 1
+Initializing random number generator from current time
+
+
+Prime numbers limit: 20000
+
+Initializing worker threads...
+
+Threads started!
+
+CPU speed:
+    events per second:  2088.99
+
+General statistics:
+    total time:                          15.0004s
+    total number of events:              31337
+
+Latency (ms):
+         min:                                    0.47
+         avg:                                    0.48
+         max:                                    0.72
+         95th percentile:                        0.48
+         sum:                                14997.66
+
+Threads fairness:
+    events (avg/stddev):           31337.0000/0.00
+    execution time (avg/stddev):   14.9977/0.00
+```
+METRIC|cpu_events_s_1t|2088.99|events/s
+```text
+$ sysbench cpu --cpu-max-prime=20000 --time=15 --threads=24 run
+sysbench 1.0.20-1472a05 (using system LuaJIT 2.1.1720049189)
+
+Running the test with following options:
+Number of threads: 24
+Initializing random number generator from current time
+
+
+Prime numbers limit: 20000
+
+Initializing worker threads...
+
+Threads started!
+
+CPU speed:
+    events per second: 25135.14
+
+General statistics:
+    total time:                          15.0007s
+    total number of events:              377057
+
+Latency (ms):
+         min:                                    0.48
+         avg:                                    0.95
+         max:                                    4.06
+         95th percentile:                        0.95
+         sum:                               359943.82
+
+Threads fairness:
+    events (avg/stddev):           15710.7083/66.17
+    execution time (avg/stddev):   14.9977/0.00
+```
+METRIC|cpu_events_s_24t|25135.14|events/s
+
+## CPU — openssl speed (16 KiB blocks, MB/s)
+
+```text
+$ openssl speed -evp sha256 -bytes 16384 -seconds 3
+Doing sha256 ops for 3s on 16384 size blocks: 440559 sha256 ops in 2.99s
+version: 3.6.5
+built on: Wed Sep 30 16:33:00 2026 UTC
+options: bn(64,64)
+compiler: gcc -fPIC -pthread -m64 -Wa,--noexecstack -march=x86-64-v3 -mtune=haswell -O3 -pipe -fno-plt -fexceptions         -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security         -fstack-clash-protection -fcf-protection -mpclmul -g1 -ffile-prefix-map=/startdir/src=/usr/src/debug/openssl -flto=auto -DOPENSSL_USE_NODELETE -DL_ENDIAN -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DBROTLI -DZLIB -DZSTD -DNDEBUG
+CPUINFO: OPENSSL_ia32cap=0x7ef8320b078bffff:0x0040069c219c97a9:0x0000000000000010:0x0000000000000000:0x0000000000000000
+The 'numbers' are in 1000s of bytes per second processed.
+type          16384 bytes
+sha256         2414086.51k
+```
+METRIC|openssl_sha256_mbs|2302|MiB/s
+```text
+$ openssl speed -evp aes-256-gcm -bytes 16384 -seconds 3
+Doing AES-256-GCM ops for 3s on 16384 size blocks: 1050890 AES-256-GCM ops in 2.98s
+version: 3.6.5
+built on: Wed Sep 30 16:33:00 2026 UTC
+options: bn(64,64)
+compiler: gcc -fPIC -pthread -m64 -Wa,--noexecstack -march=x86-64-v3 -mtune=haswell -O3 -pipe -fno-plt -fexceptions         -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security         -fstack-clash-protection -fcf-protection -mpclmul -g1 -ffile-prefix-map=/startdir/src=/usr/src/debug/openssl -flto=auto -DOPENSSL_USE_NODELETE -DL_ENDIAN -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DBROTLI -DZLIB -DZSTD -DNDEBUG
+CPUINFO: OPENSSL_ia32cap=0x7ef8320b078bffff:0x0040069c219c97a9:0x0000000000000010:0x0000000000000000:0x0000000000000000
+The 'numbers' are in 1000s of bytes per second processed.
+type          16384 bytes
+AES-256-GCM    5777779.11k
+```
+METRIC|openssl_aes_256_gcm_mbs|5510|MiB/s
+
+## Memory — sysbench (MiB/s)
+
+```text
+$ sysbench memory --time=10 --memory-block-size=1M --memory-total-size=200G --threads=1 run
+sysbench 1.0.20-1472a05 (using system LuaJIT 2.1.1720049189)
+
+Running the test with following options:
+Number of threads: 1
+Initializing random number generator from current time
+
+
+Running memory speed test with the following options:
+  block size: 1024KiB
+  total size: 204800MiB
+  operation: write
+  scope: global
+
+Initializing worker threads...
+
+Threads started!
+
+Total operations: 204800 (40791.33 per second)
+
+204800.00 MiB transferred (40791.33 MiB/sec)
+
+
+General statistics:
+    total time:                          5.0201s
+    total number of events:              204800
+
+Latency (ms):
+         min:                                    0.02
+         avg:                                    0.02
+         max:                                    0.06
+         95th percentile:                        0.02
+         sum:                                 4999.70
+
+Threads fairness:
+    events (avg/stddev):           204800.0000/0.00
+    execution time (avg/stddev):   4.9997/0.00
+```
+METRIC|mem_mibs_1t|40791.33|MiB/s
+```text
+$ sysbench memory --time=10 --memory-block-size=1M --memory-total-size=200G --threads=24 run
+sysbench 1.0.20-1472a05 (using system LuaJIT 2.1.1720049189)
+
+Running the test with following options:
+Number of threads: 24
+Initializing random number generator from current time
+
+
+Running memory speed test with the following options:
+  block size: 1024KiB
+  total size: 204800MiB
+  operation: write
+  scope: global
+
+Initializing worker threads...
+
+Threads started!
+
+Total operations: 204792 (112045.19 per second)
+
+204792.00 MiB transferred (112045.19 MiB/sec)
+
+
+General statistics:
+    total time:                          1.8272s
+    total number of events:              204792
+
+Latency (ms):
+         min:                                    0.02
+         avg:                                    0.21
+         max:                                    3.76
+         95th percentile:                        0.31
+         sum:                                43254.95
+
+Threads fairness:
+    events (avg/stddev):           8533.0000/0.00
+    execution time (avg/stddev):   1.8023/0.01
+```
+METRIC|mem_mibs_24t|112045.19|MiB/s
+
+## Disk — fio through the filesystem (/home/mylesp/.cache/system-benchmark/fio.dat, 2G, O_DIRECT)
+
+The 4K QD1 job is the metric storage-migration.md quotes; sequential is its other one.
+```text
+$ fio --name=file_seq_write_1m --rw=write --bs=1M --iodepth=1 --time_based --runtime=10 --ramp_time=1 --ioengine=libaio --direct=1 --size=2G --filename=/home/mylesp/.cache/system-benchmark/fio.dat --randrepeat=0 --buffer_compress_percentage=0 --group_reporting
+file_seq_write_1m: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=1
+fio-3.42
+Starting 1 process
+file_seq_write_1m: Laying out IO file (1 file / 2048MiB)
+
+file_seq_write_1m: (groupid=0, jobs=1): err= 0: pid=1862021: Sat Oct 17 14:14:44 2026
+  write: IOPS=596, BW=597MiB/s (626MB/s)(5968MiB/10002msec)
+    slat (usec): min=1417, max=11644, avg=1673.91, stdev=255.45
+    clat (nsec): min=892, max=65544, avg=1342.01, stdev=886.14
+     lat (usec): min=1419, max=11645, avg=1675.26, stdev=255.48
+    clat percentiles (nsec):
+     |  1.00th=[  948],  5.00th=[  980], 10.00th=[ 1012], 20.00th=[ 1064],
+     | 30.00th=[ 1144], 40.00th=[ 1208], 50.00th=[ 1288], 60.00th=[ 1368],
+     | 70.00th=[ 1464], 80.00th=[ 1560], 90.00th=[ 1720], 95.00th=[ 1848],
+     | 99.00th=[ 1992], 99.50th=[ 2064], 99.90th=[ 5216], 99.95th=[ 6304],
+     | 99.99th=[66048]
+   bw (  KiB/s): min=598016, max=616448, per=100.00%, avg=610979.55, stdev=4361.72, samples=20
+   iops        : min=  584, max=  602, avg=596.65, stdev= 4.26, samples=20
+  lat (nsec)   : 1000=7.57%
+  lat (usec)   : 2=91.45%, 4=0.84%, 10=0.12%, 100=0.02%
+  cpu          : usr=0.11%, sys=13.85%, ctx=45031, majf=0, minf=35
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,5967,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+  WRITE: bw=597MiB/s (626MB/s), 597MiB/s-597MiB/s (626MB/s-626MB/s), io=5968MiB (6258MB), run=10002-10002msec
+```
+METRIC|file_seq_write_1m_mibs|597.0|MiB/s
+METRIC|file_seq_write_1m_iops|596|IOPS
+```text
+$ fio --name=file_seq_read_1m --rw=read --bs=1M --iodepth=1 --time_based --runtime=10 --ramp_time=1 --ioengine=libaio --direct=1 --size=2G --filename=/home/mylesp/.cache/system-benchmark/fio.dat --randrepeat=0 --buffer_compress_percentage=0 --group_reporting
+file_seq_read_1m: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=1
+fio-3.42
+Starting 1 process
+
+file_seq_read_1m: (groupid=0, jobs=1): err= 0: pid=1862118: Sat Oct 17 14:14:56 2026
+  read: IOPS=983, BW=983MiB/s (1031MB/s)(9833MiB/10001msec)
+    slat (usec): min=40, max=312, avg=50.47, stdev= 5.65
+    clat (usec): min=884, max=1806, avg=966.09, stdev=28.71
+     lat (usec): min=957, max=1855, avg=1016.55, stdev=29.05
+    clat percentiles (usec):
+     |  1.00th=[  922],  5.00th=[  938], 10.00th=[  938], 20.00th=[  947],
+     | 30.00th=[  955], 40.00th=[  955], 50.00th=[  963], 60.00th=[  971],
+     | 70.00th=[  971], 80.00th=[  979], 90.00th=[  988], 95.00th=[ 1004],
+     | 99.00th=[ 1037], 99.50th=[ 1139], 99.90th=[ 1303], 99.95th=[ 1336],
+     | 99.99th=[ 1811]
+   bw (  KiB/s): min=999424, max=1011712, per=100.00%, avg=1006897.55, stdev=2840.08, samples=20
+   iops        : min=  976, max=  988, avg=983.25, stdev= 2.77, samples=20
+  lat (usec)   : 1000=95.11%
+  lat (msec)   : 2=4.89%
+  cpu          : usr=0.17%, sys=5.05%, ctx=9946, majf=0, minf=35
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=9833,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+   READ: bw=983MiB/s (1031MB/s), 983MiB/s-983MiB/s (1031MB/s-1031MB/s), io=9833MiB (10.3GB), run=10001-10001msec
+```
+METRIC|file_seq_read_1m_mibs|983.0|MiB/s
+METRIC|file_seq_read_1m_iops|983|IOPS
+```text
+$ fio --name=file_rand_read_4k_qd1 --rw=randread --bs=4k --iodepth=1 --time_based --runtime=15 --ramp_time=1 --ioengine=libaio --direct=1 --size=2G --filename=/home/mylesp/.cache/system-benchmark/fio.dat --randrepeat=0 --buffer_compress_percentage=0 --group_reporting
+file_rand_read_4k_qd1: (g=0): rw=randread, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=1
+fio-3.42
+Starting 1 process
+
+file_rand_read_4k_qd1: (groupid=0, jobs=1): err= 0: pid=1862251: Sat Oct 17 14:15:14 2026
+  read: IOPS=8447, BW=33.0MiB/s (34.6MB/s)(495MiB/15001msec)
+    slat (usec): min=4, max=226, avg= 5.89, stdev= 1.76
+    clat (nsec): min=1924, max=13599k, avg=112158.32, stdev=187716.50
+     lat (usec): min=100, max=13605, avg=118.05, stdev=187.75
+    clat percentiles (usec):
+     |  1.00th=[  100],  5.00th=[  101], 10.00th=[  102], 20.00th=[  103],
+     | 30.00th=[  104], 40.00th=[  108], 50.00th=[  110], 60.00th=[  111],
+     | 70.00th=[  112], 80.00th=[  114], 90.00th=[  116], 95.00th=[  118],
+     | 99.00th=[  121], 99.50th=[  126], 99.90th=[  169], 99.95th=[  652],
+     | 99.99th=[ 9634]
+   bw (  KiB/s): min=11680, max=35240, per=100.00%, avg=33794.60, stdev=4497.55, samples=30
+   iops        : min= 2920, max= 8810, avg=8448.63, stdev=1124.38, samples=30
+  lat (usec)   : 2=0.01%, 50=0.01%, 100=0.95%, 250=98.97%, 500=0.01%
+  lat (usec)   : 750=0.01%, 1000=0.01%
+  lat (msec)   : 2=0.01%, 10=0.04%, 20=0.01%
+  cpu          : usr=1.08%, sys=5.97%, ctx=126949, majf=0, minf=35
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=126723,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+   READ: bw=33.0MiB/s (34.6MB/s), 33.0MiB/s-33.0MiB/s (34.6MB/s-34.6MB/s), io=495MiB (519MB), run=15001-15001msec
+```
+METRIC|file_rand_read_4k_qd1_mibs|33.0|MiB/s
+METRIC|file_rand_read_4k_qd1_iops|8447|IOPS
+```text
+$ fio --name=file_rand_read_4k_qd32 --rw=randread --bs=4k --iodepth=32 --time_based --runtime=10 --ramp_time=1 --ioengine=libaio --direct=1 --size=2G --filename=/home/mylesp/.cache/system-benchmark/fio.dat --randrepeat=0 --buffer_compress_percentage=0 --group_reporting
+file_rand_read_4k_qd32: (g=0): rw=randread, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=32
+fio-3.42
+Starting 1 process
+
+file_rand_read_4k_qd32: (groupid=0, jobs=1): err= 0: pid=1862360: Sat Oct 17 14:15:26 2026
+  read: IOPS=69.7k, BW=272MiB/s (286MB/s)(2724MiB/10001msec)
+    slat (usec): min=3, max=422, avg= 5.07, stdev= 1.19
+    clat (usec): min=60, max=2560, avg=453.58, stdev=328.50
+     lat (usec): min=65, max=2566, avg=458.65, stdev=328.50
+    clat percentiles (usec):
+     |  1.00th=[   97],  5.00th=[  102], 10.00th=[  113], 20.00th=[  165],
+     | 30.00th=[  221], 40.00th=[  285], 50.00th=[  359], 60.00th=[  449],
+     | 70.00th=[  570], 80.00th=[  717], 90.00th=[  955], 95.00th=[ 1139],
+     | 99.00th=[ 1401], 99.50th=[ 1483], 99.90th=[ 1614], 99.95th=[ 1663],
+     | 99.99th=[ 2180]
+   bw (  KiB/s): min=249776, max=284744, per=100.00%, avg=278957.15, stdev=7106.04, samples=20
+   iops        : min=62444, max=71186, avg=69739.35, stdev=1776.55, samples=20
+  lat (usec)   : 100=3.60%, 250=31.85%, 500=29.15%, 750=16.99%, 1000=9.99%
+  lat (msec)   : 2=8.41%, 4=0.01%
+  cpu          : usr=6.52%, sys=41.34%, ctx=431172, majf=0, minf=35
+  IO depths    : 1=0.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=100.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.1%, 64=0.0%, >=64=0.0%
+     issued rwts: total=697357,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=32
+
+Run status group 0 (all jobs):
+   READ: bw=272MiB/s (286MB/s), 272MiB/s-272MiB/s (286MB/s-286MB/s), io=2724MiB (2857MB), run=10001-10001msec
+```
+METRIC|file_rand_read_4k_qd32_mibs|272.0|MiB/s
+METRIC|file_rand_read_4k_qd32_iops|69700|IOPS
+```text
+$ fio --name=file_rand_write_4k_qd32 --rw=randwrite --bs=4k --iodepth=32 --time_based --runtime=10 --ramp_time=1 --ioengine=libaio --direct=1 --size=2G --filename=/home/mylesp/.cache/system-benchmark/fio.dat --randrepeat=0 --buffer_compress_percentage=0 --group_reporting
+file_rand_write_4k_qd32: (g=0): rw=randwrite, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=32
+fio-3.42
+Starting 1 process
+
+file_rand_write_4k_qd32: (groupid=0, jobs=1): err= 0: pid=1862469: Sat Oct 17 14:15:39 2026
+  write: IOPS=6147, BW=24.0MiB/s (25.2MB/s)(244MiB/10135msec)
+    slat (usec): min=34, max=778789, avg=161.36, stdev=4465.64
+    clat (usec): min=4, max=2691.4k, avg=5041.09, stdev=73463.37
+     lat (usec): min=1180, max=2708.4k, avg=5202.39, stdev=75619.21
+    clat percentiles (usec):
+     |  1.00th=[   1172],  5.00th=[   1221], 10.00th=[   1270],
+     | 20.00th=[   1303], 30.00th=[   1336], 40.00th=[   1352],
+     | 50.00th=[   1385], 60.00th=[   1418], 70.00th=[   1450],
+     | 80.00th=[   1483], 90.00th=[   1614], 95.00th=[   3195],
+     | 99.00th=[  18744], 99.50th=[  19268], 99.90th=[1652556],
+     | 99.95th=[2088764], 99.99th=[2432697]
+   bw (  KiB/s): min=    8, max=89322, per=100.00%, avg=24931.30, stdev=36593.76, samples=20
+   iops        : min=    2, max=22330, avg=6232.80, stdev=9148.39, samples=20
+  lat (usec)   : 10=0.01%
+  lat (msec)   : 2=91.89%, 4=3.17%, 10=0.04%, 20=4.62%, 50=0.15%
+  lat (msec)   : 250=0.01%, 500=0.01%, 750=0.01%, 1000=0.01%, 2000=0.06%
+  lat (msec)   : >=2000=0.08%
+  cpu          : usr=1.00%, sys=15.03%, ctx=84803, majf=0, minf=35
+  IO depths    : 1=0.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=100.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.1%, 64=0.0%, >=64=0.0%
+     issued rwts: total=0,62306,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=32
+
+Run status group 0 (all jobs):
+  WRITE: bw=24.0MiB/s (25.2MB/s), 24.0MiB/s-24.0MiB/s (25.2MB/s-25.2MB/s), io=244MiB (255MB), run=10135-10135msec
+```
+METRIC|file_rand_write_4k_qd32_mibs|24.0|MiB/s
+METRIC|file_rand_write_4k_qd32_iops|6147|IOPS
+- Free space on `/` after the file jobs: 24G
+
+## Disk — fio on the raw partition (read-only, bypasses the filesystem)
+
+```text
+$ fio --name=raw_seq_read_1m --rw=read --bs=1M --iodepth=1 --time_based --runtime=8 --ramp_time=1 --ioengine=libaio --direct=1 --filename=/dev/nvme1n1p2 --offset=1G --size=4G --group_reporting
+raw_seq_read_1m: (g=0): rw=read, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=libaio, iodepth=1
+fio-3.42
+Starting 1 process
+
+raw_seq_read_1m: (groupid=0, jobs=1): err= 0: pid=1862613: Sat Oct 17 14:15:50 2026
+  read: IOPS=889, BW=889MiB/s (932MB/s)(7114MiB/8001msec)
+    slat (usec): min=23, max=511, avg=40.07, stdev=14.41
+    clat (usec): min=543, max=10722, avg=1084.09, stdev=330.13
+     lat (usec): min=622, max=10782, avg=1124.16, stdev=330.25
+    clat percentiles (usec):
+     |  1.00th=[  717],  5.00th=[  881], 10.00th=[  898], 20.00th=[  914],
+     | 30.00th=[  930], 40.00th=[  938], 50.00th=[  955], 60.00th=[  963],
+     | 70.00th=[ 1029], 80.00th=[ 1172], 90.00th=[ 1565], 95.00th=[ 1811],
+     | 99.00th=[ 2212], 99.50th=[ 2376], 99.90th=[ 2835], 99.95th=[ 2868],
+     | 99.99th=[10683]
+   bw (  KiB/s): min=578693, max=1054720, per=100.00%, avg=910645.56, stdev=173737.93, samples=16
+   iops        : min=  565, max= 1030, avg=889.25, stdev=169.69, samples=16
+  lat (usec)   : 750=1.10%, 1000=66.47%
+  lat (msec)   : 2=29.90%, 4=2.52%, 20=0.01%
+  cpu          : usr=0.14%, sys=2.91%, ctx=20904, majf=0, minf=35
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=7114,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+   READ: bw=889MiB/s (932MB/s), 889MiB/s-889MiB/s (932MB/s-932MB/s), io=7114MiB (7460MB), run=8001-8001msec
+
+Disk stats (read/write):
+  nvme1n1: ios=64819/185, sectors=16593664/4040, merge=0/1, ticks=48518/305, in_queue=48837, util=95.36%
+```
+METRIC|raw_seq_read_1m_mibs|889.0|MiB/s
+METRIC|raw_seq_read_1m_iops|889|IOPS
+```text
+$ fio --name=raw_rand_read_4k_qd1 --rw=randread --bs=4k --iodepth=1 --time_based --runtime=8 --ramp_time=1 --ioengine=libaio --direct=1 --filename=/dev/nvme1n1p2 --offset=1G --size=4G --group_reporting
+raw_rand_read_4k_qd1: (g=0): rw=randread, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=1
+fio-3.42
+Starting 1 process
+
+raw_rand_read_4k_qd1: (groupid=0, jobs=1): err= 0: pid=1862708: Sat Oct 17 14:16:00 2026
+  read: IOPS=6923, BW=27.0MiB/s (28.4MB/s)(216MiB/8001msec)
+    slat (nsec): min=1923, max=206731, avg=3737.09, stdev=1916.75
+    clat (usec): min=41, max=721, avg=140.36, stdev=36.07
+     lat (usec): min=46, max=725, avg=144.09, stdev=36.05
+    clat percentiles (usec):
+     |  1.00th=[   48],  5.00th=[   97], 10.00th=[  100], 20.00th=[  106],
+     | 30.00th=[  111], 40.00th=[  130], 50.00th=[  137], 60.00th=[  141],
+     | 70.00th=[  178], 80.00th=[  186], 90.00th=[  190], 95.00th=[  192],
+     | 99.00th=[  196], 99.50th=[  200], 99.90th=[  208], 99.95th=[  221],
+     | 99.99th=[  420]
+   bw (  KiB/s): min=27440, max=28064, per=100.00%, avg=27703.38, stdev=161.87, samples=16
+   iops        : min= 6860, max= 7016, avg=6925.75, stdev=40.49, samples=16
+  lat (usec)   : 50=1.12%, 100=9.02%, 250=89.83%, 500=0.03%, 750=0.01%
+  cpu          : usr=0.88%, sys=2.71%, ctx=73982, majf=0, minf=36
+  IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     issued rwts: total=55393,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=1
+
+Run status group 0 (all jobs):
+   READ: bw=27.0MiB/s (28.4MB/s), 27.0MiB/s-27.0MiB/s (28.4MB/s-28.4MB/s), io=216MiB (227MB), run=8001-8001msec
+
+Disk stats (read/write):
+  nvme1n1: ios=68099/176, sectors=544792/3944, merge=0/0, ticks=9522/1270, in_queue=10943, util=95.95%
+```
+METRIC|raw_rand_read_4k_qd1_mibs|27.0|MiB/s
+METRIC|raw_rand_read_4k_qd1_iops|6923|IOPS
+```text
+$ fio --name=raw_rand_read_4k_qd32 --rw=randread --bs=4k --iodepth=32 --time_based --runtime=8 --ramp_time=1 --ioengine=libaio --direct=1 --filename=/dev/nvme1n1p2 --offset=1G --size=4G --group_reporting
+raw_rand_read_4k_qd32: (g=0): rw=randread, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=32
+fio-3.42
+Starting 1 process
+
+raw_rand_read_4k_qd32: (groupid=0, jobs=1): err= 0: pid=1862804: Sat Oct 17 14:16:11 2026
+  read: IOPS=50.7k, BW=198MiB/s (208MB/s)(1584MiB/8002msec)
+    slat (nsec): min=1663, max=1377.5k, avg=3053.44, stdev=2923.63
+    clat (usec): min=25, max=3408, avg=628.29, stdev=449.54
+     lat (usec): min=27, max=3410, avg=631.34, stdev=449.53
+    clat percentiles (usec):
+     |  1.00th=[   98],  5.00th=[  129], 10.00th=[  165], 20.00th=[  231],
+     | 30.00th=[  314], 40.00th=[  404], 50.00th=[  510], 60.00th=[  635],
+     | 70.00th=[  783], 80.00th=[  979], 90.00th=[ 1287], 95.00th=[ 1532],
+     | 99.00th=[ 1991], 99.50th=[ 2114], 99.90th=[ 2376], 99.95th=[ 2474],
+     | 99.99th=[ 2606]
+   bw (  KiB/s): min=200088, max=205024, per=100.00%, avg=202725.06, stdev=1665.58, samples=16
+   iops        : min=50022, max=51256, avg=50681.25, stdev=416.38, samples=16
+  lat (usec)   : 50=0.01%, 100=1.19%, 250=21.19%, 500=26.83%, 750=18.76%
+  lat (usec)   : 1000=12.74%
+  lat (msec)   : 2=18.35%, 4=0.93%
+  cpu          : usr=5.80%, sys=16.09%, ctx=448925, majf=0, minf=35
+  IO depths    : 1=0.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=100.0%, >=64=0.0%
+     submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
+     complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.1%, 64=0.0%, >=64=0.0%
+     issued rwts: total=405371,0,0,0 short=0,0,0,0 dropped=0,0,0,0
+     latency   : target=0.00ns, window=0.00ns, percentile=100.00%, depth=32
+
+Run status group 0 (all jobs):
+   READ: bw=198MiB/s (208MB/s), 198MiB/s-198MiB/s (208MB/s-208MB/s), io=1584MiB (1661MB), run=8002-8002msec
+
+Disk stats (read/write):
+  nvme1n1: ios=500417/433, sectors=4003336/11760, merge=0/3, ticks=313502/161, in_queue=313664, util=98.96%
+```
+METRIC|raw_rand_read_4k_qd32_mibs|198.0|MiB/s
+METRIC|raw_rand_read_4k_qd32_iops|50700|IOPS
+
+## GPU — vkmark (Vulkan; session-dependent, compare like with like)
+
+```text
+$ vkmark --winsys wayland -b vertex:duration=4 -b texture:duration=4
+=======================================================
+    vkmark 2025.01
+=======================================================
+    Vendor ID:      0x10DE
+    Device ID:      0x2504
+    Device Name:    NVIDIA GeForce RTX 3060
+    Driver Version: 2580775424
+    Device UUID:    6089e5edcd1980f76f9c57eeaf41849b
+=======================================================
+[vertex] duration=4: FPS: 22679 FrameTime: 0.044 ms
+[texture] duration=4: FPS: 20691 FrameTime: 0.048 ms
+=======================================================
+                                   vkmark Score: 21685
+=======================================================
+```
+METRIC|gpu_fps_1|22679|fps
+METRIC|gpu_fps_2|20691|fps
+METRIC|gpu_vkmark_score|21685|score
+
+## After the run
+
+```text
+$ uptime -p; awk "{print \"load:\", \$1, \$2, \$3}" /proc/loadavg
+up 3 days, 1 hour, 59 minutes
+load: 1.60 1.33 1.27
+```
+```text
+$ df -h --output=avail / | tail -1
+  25G
+```
+
+Results written to `benchmarks/2026-10-17-before-run6.txt` relative to the repo root.

@@ -1918,12 +1918,20 @@ can never work here either, because the X root reports no size:
 
 Consequences, all measured rather than assumed:
 
-- The X root is `0x0`, so no X11 tool can take a full-desktop grab here.
-- `spectacle -f` / `--fullscreen` **exits 0 and writes no file**. This is the
-  dangerous one: an exit-status check reports success. `-m` does write a file
-  (1920x1080, the current monitor).
-- `spectacle -a` (active window) is the only capture that works reliably. Which
-  means it captures **focus**, not the app you meant.
+- `xwininfo` and `xrandr` here talk to **Xwayland**, which reports a `0x0` root
+  window because nothing has sized it. That number describes Xwayland's
+  bookkeeping, not the compositor's framebuffer. Reading it as "no full-screen
+  capture is possible" is the mistake this entry used to make.
+- `spectacle -m` (current monitor) works, and does so reliably: 4/4 runs on
+  2026-10-16. This desktop is a virtual output whose size moves -- 3440x1440 and
+  later 1920x1080 in the same session -- so read the size off the artifact
+  instead of caching it anywhere.
+- `spectacle -f` / `--fullscreen` **exits 0 and writes no file** -- 0/8 runs on
+  2026-10-16. This is the dangerous one: an exit-status check reports success.
+  `shot.sh` now tries `-f` and falls back to `-m`.
+- `spectacle -a` (active window) works, and returns the window *including*
+  decoration and shadow margins, so its size can exceed the screen (3570x1524 on
+  a 3440x1440 desktop). It captures **focus**, not the app you meant.
 - `xdotool`, `wmctrl`, `xwd`, `kdotool` and `qdbus` are all absent; `xwininfo`
   and `busctl` are present.
 
@@ -1932,16 +1940,19 @@ moved to a browser. The image was sharp, correctly sized and non-black, so every
 automated sanity check passed, and it was read as if it showed wezterm. A grab of
 the wrong window is indistinguishable from a good grab by mechanical means.
 
-The rule that follows: identify the target before trusting a capture. Use
-`xwininfo -root -tree | grep -i <app>` for the id, title and geometry, and then
-confirm from the image itself -- the visible title bar -- that you got that
-window. Never infer screen contents from what the tool reported as success.
+The rule that follows: identify the target before trusting a capture. Focus the
+window you mean, then confirm from the image itself -- the visible title bar --
+that you got that window. Never infer screen contents from what the tool reported
+as success. `xwininfo` cannot help you pick the window either: under Wayland its
+tree holds only Xwayland's own 1x1 and 3x3 helper surfaces, no real windows.
 
-The screenshot skill at `~/.pi/agent/skills/taking-desktop-screenshots/` has been
-updated with these findings, and its `shot.sh` gained an `app <match>` mode that
-resolves geometry via `xwininfo`. That mode is correct but currently cannot
-complete on this machine, since it needs the full-screen grab that the `0x0` root
-makes unavailable; it fails loudly rather than returning a wrong image.
+The screenshot skill at `~/.pi/agent/skills/taking-desktop-screenshots/` carries
+these findings. `full`, `window` and `region` all work; `region` crops
+deterministically out of a full grab and never opens an interactive selection
+box. Its `app <match>` mode resolves geometry via `xwininfo` and cannot work here
+-- not because of the `0x0` root, but because Xwayland's window tree holds no real
+application windows. It fails loudly rather than returning a wrong image, and the
+mode table says to use a focused `window` capture instead.
 
 ## 2026-09-29
 
@@ -4353,3 +4364,240 @@ Machine changes outside this repo, for the record: `/etc/plasmashell-wedge-watch
 (autokill enabled), `/etc/sysctl.d/99-recovery.conf`, the VT3 getty drop-in, and the limine
 cmdline edit — each with its undo above or in `frozen-system-recovery.md`. Hermes was removed
 entirely (archive: `~/Documents/removed/hermes-removed-20261014-091342.tar.zst`).
+
+## 2026-10-17 — hardware survey refreshed; a second redaction leak closed; the KVM written down
+
+`hardware-check.md` was ten days stale — written before the KVM was inline and before the storage
+moved — so it was regenerated and reinstalled. Two findings came out of doing that rather than
+trusting the old copy.
+
+**1. The machine-id was leaking, in the same class as the 2026-10-11 leak.** A fresh run passes the
+MAC / IP / SSID rules, but the file still carried the **machine-id**: Limine names its kernel-staging
+directory `/boot/<machine-id>/`, and the existing `Machine ID` rule matched only the *labelled*
+`hostnamectl` form. The 2026-10-11 hand-redaction had therefore been masking a hole that every
+future regeneration would have republished.
+
+    scripts/hardware-check.sh    rules moved into one REDACT_SED variable, printed by
+                                 --print-redact-sed (no second copy to rot);
+                                 + s/\b[0-9a-fA-F]{32}\b/[redacted]/g — context-free, so it catches
+                                   the /boot directory name; the dashes keep UUIDs and GPT GUIDs
+                                   out of its way;
+                                 + a redaction self-test that closes every run and exits non-zero if
+                                   any synthetic identifier survives. That is the guard
+                                   premigration-inventory.sh has had since 2026-10-11 and this
+                                   script never had, which is how the leak shipped;
+                                 + "13 sections" corrected to 14 (stale since PCIe topology landed).
+
+    # before committing the published copy:
+    MID=$(cat /etc/machine-id); grep -c "$MID" hardware-check.md            # -> 0
+    grep -coiE '([0-9a-f]{2}:){5}[0-9a-f]{2}|[0-9]{1,3}(\.[0-9]{1,3}){3}' hardware-check.md  # -> 0
+    scripts/hardware-check.sh | tail -13                                    # self-test, all "redacted"
+    # negative control, so the test cannot pass vacuously: swap the 32-hex rule for a no-op in a
+    # copy of the script -> the self-test FAILs on the machine-id fixture and the run exits 1
+    # undo: git checkout hardware-check.md scripts/hardware-check.sh \
+    #       && rm ~/Documents/hardware-check-full-2026-10-17.md
+
+**2. The peripherals are not self-describing, so they are recorded.** The KVM presents as three
+Genesys hubs and two QinHeng serial bridges — nothing on the machine says "AV Access iDock P10" — so
+it is written down in [system-inventory.md](system-inventory.md) from the owner's description, with
+the two consequences this refresh could see: the display is back to **59.97 Hz with no VRR and no
+brightness control** (a direct connection reported 120 Hz with both), and KVM input switching is what
+tears the HDMI audio node down and re-adds it — the recurring `poll fd error/hangup (card removed?)`
+and the dead node behind the volume applet's errors. That closes the "Audio/PipeWire path" candidate
+left open in [plasmashell-wedge.md](plasmashell-wedge.md): it is the dock, not plasmashell.
+
+Storage drift the 2026-10-06 survey predates, now recorded: the 980 PRO's 443 GB btrfs partition has
+no filesystem (`blkid` shows only a PARTUUID; contents rescued to
+`~/Documents/rescued-nvme1n1p5-2026-10-11/`), `sda3` is mounted read-only at `/mnt/12TB_2` outside
+`/etc/fstab`, and root is at 89 % (28 GiB free) against the cache budget in
+[build-caches.md](build-caches.md).
+
+Artifacts: `~/Documents/hardware-check-full-2026-10-17.md` (unredacted, 42 KB).
+
+## 2026-10-17 (later) — a before/after benchmark pair for the rebuild
+
+Nothing recorded what this machine's performance *was*, so a fresh install on a new NVMe could
+have been declared an improvement on no evidence. Three tools, one replayable suite, and three
+runs of it:
+
+    sudo pacman -Syu --noconfirm fio sysbench vkmark     # snapper pre 185 / post 186
+    sudo pacman -Rns fio sysbench vkmark                 # undo
+    scripts/system-benchmark.sh before                   # ~2.5 min per run; run it 3x
+    scripts/system-benchmark.sh --average benchmarks/2026-10-17-before*.txt
+    scripts/system-benchmark.sh --diff <before-avg> <after-avg>
+
+That transaction also carried 114 pending updates (`pacman` advised a reboot; the baseline is an
+up-to-date system, and the running kernel is 7.2.9-2 either way). `vkmark` has no headless winsys,
+so it opens a window for a few seconds. Tool rows: `standard-tools.md`; artifacts and variance:
+[benchmarks/README.md](benchmarks/README.md).
+
+Three things the runs themselves turned up:
+
+1. **The "78.7 MB/s at 4K QD1" in `storage-migration.md` is mislabeled.** At true QD1 the old root
+   does 27 MiB/s raw and 33 MiB/s through btrfs, the 980 PRO 56 MiB/s, yet **sequential reproduces
+   exactly** (2164 MiB/s against the document's 2.2 GB/s). 253 MB/s at 4 KiB is ~16 µs per I/O,
+   which no NVMe device does at QD1, so those figures are QD8–QD32. The document now says so, and
+   the control run is kept verbatim as `benchmarks/2026-10-17-disk-control.txt`.
+2. **The old root stops scaling with queue depth** — QD32/QD1 of 7.3× against the 980 PRO's 12.2×.
+   That is the number to watch when the new drive lands in the CPU slot.
+3. **The suite leaked the machine-id, and was caught before it was committed.** It printed
+   `hostnamectl`, which carries Machine ID, Boot ID and Product UUID. The script now filters those
+   lines and ends by grepping its own output for the machine-id, failing the run if it appears —
+   verified both ways (exits 0 on a clean run, fires on a planted value). This is the third time
+   this identifier class has headed for a published file; the guard is now in the script that
+   prints it.
+
+Variance is why the average exists, and why the median is what gets quoted: across the three runs
+CPU, crypto and memory repeated to ≤ 0.5 %, but 4K random write spread 95 % (25.2–49.3 MiB/s) and
+raw sequential read 44 % (620–892 MiB/s). A single run of this suite is not a baseline.
+
+Verify: `rg -c "$(cat /etc/machine-id)" benchmarks/*.txt` → 0 in every file; `--average` on a glob
+that now contains its own output skips it (`skipping … it is itself an average`).
+
+Follow-up the same evening, once the GPU metrics were actually being read: the vkmark section had
+run all along — it printed `FPS: 19255` and `vkmark Score: 20913` while the parser looked for
+`N fps` and `^Score:`, so runs 1–3 recorded no GPU numbers at all. Parser fixed, two more runs
+taken (runs 4–5), and the average regenerated over all five: GPU ≈ 23 300 FPS / score 23 304
+(n=2), everything else n=5. The extra samples sharpened the variance lesson rather than softening
+it — 4K random write now spans **25.2–83.9 MiB/s, a 233 % spread** (median 35.0 against a mean of
+45.5), which is exactly why the median for noisy metrics is what gets quoted, and why `--average`
+prints min/max/spread next to it. Canonical baseline file: `benchmarks/2026-10-17-before-avg.txt`.
+
+One more repeat on request (run 6, ~2.5 min) changed almost nothing — CPU 0.0 %, 4K QD32 read
+0.1 %, memory −0.3 %, raw sequential +1.9 % — except the two known-noisy metrics, where it made the
+case for medians better than any argument: the 4K random write **mean** slid 45.5 → 41.9 MiB/s
+while its **median** barely moved (35.0 → 34.6). GPU numbers now average over three samples (score
+mean 22 764, median 23 089, one run 8.5 % low — 14 % on the texture scene), so an after-run should
+be judged on medians there too. The canonical baseline is the six-run average.
+
+**PlasmaZones is dead after that same update — deliberately left that way.** The 114-package
+transaction took KWin to 6.8.0, while the installed `plasmazones 3.4.19-1` ships a KWin effect
+built for 6.7.5, which KWin refuses to load. The daemon names its own cause:
+
+    plasmazonesd[...]: Compositor bridge did not register within 20 s of startup — window control is
+    dead. "The PlasmaZones KWin effect was built for KWin 6.7.5 but KWin 6.8.0 is running, so KWin
+    will not load it. Rebuild and reinstall PlasmaZones against the running KWin."
+
+What the service state does *not* show: `systemctl --user is-active plasmazones.service` still says
+`active`, because the daemon itself runs — only the KWin effect is refused, so the feature is inert
+while the unit looks healthy. Do not use `is-active` as the test; the journal line above is it
+(`fresh-install-checklist.md` step 3 now greps for it). Owner's decision on 2026-10-17: not chased
+here, it is a rebuild item for the fresh install.
+
+## 2026-10-17 (evening) — instrumenting a reboot loop, for a boot-time baseline
+
+Boot time is the one number a rebuild can plausibly move, and it cannot be measured once: this
+machine's disk metrics already swing 250 % between identical runs. A loop also catches what a single
+boot cannot — a unit that fails, a boot that never reached the desktop, a shutdown that did not
+finish, an NVMe that enumerates in a different order or trains at a different link speed.
+
+**Decision (AGENTS.md contract #3): temporary instrumentation, not a new component.** It exists for
+the pre-rebuild loop only, is listed as temporary in `system-inventory.md`, and must be removed when
+the loop ends. Boot telemetry does not belong in the new install's steady state.
+
+    do:
+      # source of truth is scripts/boot-capture.sh; install by copy (plasmashell-watch/ precedent,
+      # so root never executes a file out of a git working tree)
+      sudo install -m 0755 -o root -g root ~/cachyos-config/scripts/boot-capture.sh /usr/local/bin/boot-capture.sh
+      # /etc/systemd/system/boot-capture.service  -> [Service] Type=oneshot,
+      #                                             ExecStart=/usr/local/bin/boot-capture.sh
+      # /etc/systemd/system/boot-capture.timer    -> [Timer] OnBootSec=90s, AccuracySec=1s,
+      #                                             Persistent=false, Unit=boot-capture.service
+      #                                             [Install] WantedBy=timers.target
+      sudo systemctl daemon-reload && sudo systemctl enable --now boot-capture.timer
+    undo:
+      sudo systemctl disable --now boot-capture.timer
+      sudo rm -f /etc/systemd/system/boot-capture.service /etc/systemd/system/boot-capture.timer \
+                 /usr/local/bin/boot-capture.sh
+      sudo rm -rf /var/lib/boot-loop          # the captures too, if they are not wanted
+      sudo systemctl daemon-reload
+
+The 90 s delay is deliberate: long past `graphical.target` (30 s here), short enough to keep a loop
+practical, and a boot that dies before it shows up in `--report` as a journal boot with no capture.
+One loop cycle therefore needs ~2 min of wall clock.
+
+Per boot it captures the boot total and its five phases, system and session state, failed system and
+user units, the plasmashell start offset (the real "time to usable desktop"), the EGL-containment
+check from `plasmashell-wedge.md` (`libnvidia-eglcore` must not be mapped in plasmashell), the panel
+watchdog's state, md127, each NVMe's model/node/PCI address/link speed, error and kernel-fault
+counts, pstore records, and how the previous boot ended.
+
+Three things had to be calibrated rather than assumed — each would otherwise have produced silently
+wrong data:
+
+1. **Completion markers never appear.** `systemd-shutdown` / `Reached target Power-Off` are absent
+   from the last three boots *including ordinary reboots*; journald stops before they are written. So
+   the previous boot is classified `orderly` (a shutdown phase is present) or `abrupt` (the journal
+   stops mid-activity — hang or power cut), with `Failed unmounting` counted separately.
+2. **`systemd-analyze` ends its line with a trailing space** (`... = 30.053s `), so an `s$` anchor
+   matched nothing and the total came out empty — the same trailing-space mistake this repo already
+   documented in the hardware-check redaction sed. Fixed with `[[:space:]]*$`.
+3. **A tab is IFS *whitespace*.** `read -a` collapses runs of it and drops empty fields, so an empty
+   `total_s` cost the row its last field and the anomalies loop read `F[21]` out of 21. The TSV now
+   writes `n/a` instead of an empty field, joins the row with `printf` rather than by setting IFS
+   (semgrep flags IFS tampering, and this script runs as root), and archives the old file when the
+   schema changes instead of mixing two meanings in one table. Related: `journalctl --list-boots`
+   prints the boot id without dashes and the capture stores it with them, so the missing-boot check
+   matched nothing and flagged every boot as uncaptured until the dashes were stripped.
+
+Verified: the unit fires and exits 0; `boots.tsv` is 23 fields on the header and on the data row; the
+report prints `total 30.053 (firmware 10.405 + loader 2.216 + kernel 4.752 + initrd 2.873 + userspace
+9.804)` with `desktop ready 16.3 s`, and ends with `none in the last 8 journal boots`.
+
+Two findings from the very first capture, both worth knowing before the rebuild:
+
+- **`mdmonitor.service` is failed, so every boot reports `degraded`** — the system state is not clean
+  even when nothing is visibly wrong. Plausible with md127 degraded and auto-read-only, but it makes
+  `systemctl is-system-running` a noisy signal until it is dealt with.
+- **The previous shutdown left `Failed unmounting /var/cache`.** One occurrence so far; the loop will
+  say whether it is routine. `/var/cache` is where ccache/sccache live (`build-caches.md`), so a held
+  file handle there is a plausible cause.
+
+To run the loop: reboot, wait ~2 min, repeat. Then `sudo /usr/local/bin/boot-capture.sh --report`;
+`benchmarks/README.md` carries the same instructions and how to read the output.
+
+First loop results (three boots: two owner reboots plus the boot in progress when the first report
+ran, captured by the timer five seconds later):
+
+    median 30.05 s total (spread 12.9 %) = firmware 10.40 + loader 2.42 + kernel 4.76 +
+    initrd 2.87 + userspace 8.54; desktop ready 16.30 s on all three, spread 0.0 %
+
+- **The variance is entirely in the loader phase.** Firmware (10.320-10.405), kernel (4.752-4.764),
+  initrd (2.861-2.873) and userspace (8.464-9.804) barely move across boots, while Limine's stage ran
+  2.216, 2.415 and **6.297 s** — a 3x swing that accounts for the whole total spread. The largest
+  single phase is firmware at ~10.4 s, which no OS rebuild can change; that is a BIOS/POST number.
+- **The desktop is deterministic to 40 ms**: plasma-plasmashell entered active 16.299674 / 16.333096 /
+  16.340143 s after boot on the three boots.
+- **Disk enumeration is not stable across reboots — now measured, not assumed.** Two boots gave
+  `nvme0` = Intel 600p at `0000:01:00.0` and `nvme1` = Samsung 980 PRO at `0000:04:00.0`; the third
+  gave them inverted, with the PCI addresses unchanged. So the *root* device node changes between
+  boots and only the UUID-based `fstab` and Limine cmdline keep the machine booting — the trap
+  `storage-migration.md` is built around, with evidence. The Samsung shows `Speed 8GT/s (downgraded)`
+  in the 3.0 chipset slot, as that document says.
+- **`degraded` on every boot, always the same cause**: `mdmonitor.service` fails with
+  `mdadm: No mail address or alert command - not monitoring.` — `/etc/mdadm.conf` ships with
+  `#MAILADDR` commented out. A configuration gap, not a boot defect, and not chased here (owner is
+  mid-rebuild). Either give mdadm an alert target or `sudo systemctl mask mdmonitor.service` if a
+  degraded, unmounted, auto-read-only array is not worth monitoring — until then `degraded` cannot be
+  used as a signal, because a genuinely degraded boot looks identical.
+- The `Failed unmounting /var/cache` in the first capture did **not** recur: the last two shutdowns
+  are orderly with zero failed unmounts, so a single occurrence is not yet a pattern.
+
+Report defects found by reading its own output (all fixed; each was the kind that makes an instrument
+lie): min and max were printed from the *unsorted* array, so the spread came out **negative** (30.05
+"min" above 28.98 "max"); a just-booted machine was labelled "never captured" when the 90 s timer was
+merely still pending; the non-zero exit was an accident of an `&&` chain and is now an explicit
+verdict (`exit 1` when anomaly boots exist — today that means only the constant mdmonitor one); and
+`desktop_s` keeps two decimals, because 0.1 s rounded three different boots to "16.3".
+
+Fourth boot (15:02:58) settled the loader question: **the 6.297 s was a one-off.** Loader times across
+the four boots are 2.216 / 2.272 / 2.415 / 6.297 s, so one boot in four spent an extra ~3.9 s in
+Limine's stage — intermittent, not systematic, and the cause is not identified (ESP reads or USB
+enumeration are the plausible candidates, and the KVM's hubs sit on that path). Everything else stayed
+tight: kernel 4.752-4.764, initrd 2.861-2.873 and userspace 8.464-8.538 over the three timer
+captures, desktop ready 16.30 / 16.30 / 16.30 / 16.37 s. Disk enumeration is now 2 boots each way in
+4 — a coin toss rather than an order, which is stronger evidence for the rule in
+`storage-migration.md` than any single flip. The timer captured at exactly 90 s uptime on all three of
+its own runs, and the "capture not due yet" wording was exercised for real when a read-out landed 5 s
+early: the capture was taken on demand for the same boot and deduplicated to one row, which is the
+behaviour that keeps a human-triggered run from inflating the sample count.

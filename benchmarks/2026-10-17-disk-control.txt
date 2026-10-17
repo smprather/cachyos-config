@@ -1,0 +1,42 @@
+# Disk control run — is the 4K QD1 figure in `storage-migration.md` reproducible?
+
+One-off, 2026-10-17, ~20 s, read-only. Purpose: the suite's first "before" numbers for the Intel
+root came out at 34.1 MiB/s (through btrfs) and 27.1 MiB/s (raw device) for 4K QD1, against the
+**78.7 MB/s** that `storage-migration.md` quotes for the same figure — a 2.3× gap. The 980 PRO was
+still in the machine and that document quotes it too (253 MB/s), so it was re-measured with the
+suite's exact flags as a control.
+
+Identify the target by model, never by node — the nodes swap between boots:
+
+```text
+$ lsblk -dno NAME,MODEL,SIZE | rg -i '980|INTEL'
+nvme1n1 INTEL SSDPEKKW256G7     238.5G
+nvme0n1 Samsung SSD 980 PRO 1TB 931.5G
+```
+
+```text
+$ for job in "--name=p980_4k_qd1 --rw=randread --bs=4k --iodepth=1" \
+             "--name=p980_4k_qd32 --rw=randread --bs=4k --iodepth=32" \
+             "--name=p980_seq_1m --rw=read --bs=1M --iodepth=1"; do
+    sudo fio $job --ioengine=libaio --direct=1 --filename=/dev/nvme0n1 \
+      --offset=1G --size=4G --time_based --runtime=8 --ramp_time=1 --group_reporting
+  done
+
+read: IOPS=14.3k, BW=56.1MiB/s (58.8MB/s)     # 4K QD1   — document claims 253 MB/s
+read: IOPS=174k,  BW=679MiB/s (712MB/s)      # 4K QD32
+read: IOPS=2163,  BW=2164MiB/s (2269MB/s)    # 1M seq   — document claims 2.2 GB/s
+```
+
+What this shows:
+
+- **Sequential reproduces**: 2269 MB/s against the document's 2.2 GB/s, on the same 3.0-link slot.
+- **4K QD1 does not**: 58.8 MB/s at QD1 and 712 MB/s at QD32. 253 MB/s at 4 KiB is 63 000 IOPS,
+  i.e. ~16 µs per I/O — no NVMe device does that with a single outstanding command; the physical
+  floor at QD1 is ~30–80 µs. Those figures are characteristic of **QD8–QD32**, so the *label* is
+  what differs, not the hardware.
+- The Intel root at the same flags: 27.1 MiB/s raw and 34.1 MiB/s through btrfs at 4K QD1, 199 MiB/s
+  at QD32. Its QD32/QD1 ratio (7.3×) sits far below the 980 PRO's (12.2×) — the old root is not
+  merely slower, it stops scaling with queue depth.
+
+Conclusion: read "4K QD1" in `storage-migration.md` as "4 KiB random at high queue depth". The
+reproducible pair is `scripts/system-benchmark.sh` and `2026-10-17-before.txt` beside this file.

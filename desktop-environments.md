@@ -137,6 +137,27 @@ WantedBy=plasma-workspace.target
 That means it should start on a normal Plasma login while the service remains
 enabled.
 
+**Broken since the 2026-10-17 update, and deliberately not fixed here.** The 114-package
+transaction took KWin to 6.8.0, while the installed `plasmazones 3.4.19-1` ships a KWin effect
+built for 6.7.5, which KWin refuses to load — so zones are inert even though the unit reports
+`active`. The daemon says it itself:
+
+```text
+plasmazonesd: Compositor bridge did not register within 20 s of startup — window control is dead.
+"The PlasmaZones KWin effect was built for KWin 6.7.5 but KWin 6.8.0 is running, so KWin will not
+load it. Rebuild and reinstall PlasmaZones against the running KWin."
+```
+
+The fix is a rebuild or reinstall of PlasmaZones against the running KWin; the owner deferred it to
+the fresh install (see `fresh-install-checklist.md` step 3, which greps the journal for that line).
+Do **not** judge this service by `is-active` — it cannot see this failure mode.
+
+Worth knowing before the rebuild: PlasmaZones is a tracked `cachyos` repo package (last upgraded
+2026-09-23, `3.4.16-1` → `3.4.19-1`) and the repo's current build is *still* `3.4.19-1`, compiled
+against KWin 6.7.x. A fresh install with KWin 6.8.0 will therefore inherit the same inert effect
+until CachyOS ships a rebuild — check `pacman -Si plasmazones` for a version bump, and if there is
+none, this is a package bug to report rather than anything misconfigured locally.
+
 Do not run it in GNOME. On 2026-09-06, `plasmazonesd` started during a GNOME
 Wayland session and created a full-screen `PlasmaZones` XWayland window above
 WezTerm:
