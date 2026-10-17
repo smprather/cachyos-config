@@ -4789,6 +4789,50 @@ Artifacts: `benchmarks/2026-10-17-after{,-run2,-run3}.txt` and `-after-avg.txt`.
 Still owed (recorded so it is not lost): a `standard-tools.md` row for `github-cli` and one for `keyd`,
 and an after-row in `benchmarks/README.md`'s table.
 
+## 2026-10-17 (night, still later) — system software restored onto the new install
+
+The package set and services were brought back to the old system's shape, deliberately **minus the
+superseded desktop layers** (Hyprland/HyDE, GNOME, and their utilities): 215 -> 259 explicit packages.
+
+    do:    yes | sudo pacman -Syu pipewire-jack      # snapper 15/16 — replaces jack2, the documented
+                                                     # conflict in hyprland-cachyos-lua-hyde.md
+           sudo pacman -Syu --noconfirm <43-package DE-agnostic list>
+                                                     # snapper 17/18; see the commit message
+           sudo systemctl enable --now docker.service earlyoom.service clamav-freshclam.service
+           sudo usermod -aG docker mylesp
+    undo:  sudo pacman -Rns <the same list>; sudo systemctl disable --now <the same units>;
+           sudo gpasswd -d mylesp docker
+
+Which services and groups to restore was **diffed against the old disk's own `*.wants` directories and
+`/etc/group`**, not remembered: only `docker`, `earlyoom` and `clamav-freshclam` were enabled there and
+missing here (`boot-capture.timer` was skipped on purpose — it is the temporary instrument), and
+`docker` was the only missing group. The group list now matches exactly: sys network wheel audio lp
+storage video users rfkill nopasswdlogin mylesp docker.
+
+**Passwordless login restored, but not the old way.** This install ships `plasmalogin` (Plasma Login
+Manager), so instead of installing greetd + noctalia the autologin went into `/etc/plasmalogin.conf`,
+which already had `[Autologin] Session=plasma`; the missing piece was `User=`:
+
+    do:     sudo cp /etc/plasmalogin.conf /etc/plasmalogin.conf.bak-<stamp>
+            sudo sed -i '/^\[Autologin\]/a User=mylesp' /etc/plasmalogin.conf
+    undo:   restore that .bak
+    verify: next boot reaches the desktop with no prompt — never by restarting the DM, which kills the
+            session being worked in
+
+The other two legs of the posture were already here from the home mirror: `kscreenlockerrc`
+(`Autolock=false`, `LockOnResume=false`, `LockOnDelay=0`) and the blank `login.keyring`.
+
+Also regenerated `hardware-check.md` for **this** machine — 888 lines, 14 sections, redaction self-test
+clean, machine-id/MAC/IPV4 all zero — so the repo's hardware facts now carry the new UUIDs, the 9100 PRO
+in the CPU slot, and the old 600p at `/mnt/oldroot`. Unredacted copy:
+`~/Documents/hardware-check-full-new-system-2026-10-17.md`.
+
+Not restored, on purpose or pending: the Hyprland/HyDE and GNOME stacks and their utilities;
+`chaotic-aur` (`google-chrome`, `netgen-git`, `qimgv-git`, `magic` need it bootstrapped — the old pacman
+cache holds no keyring copies, so it needs its own network bootstrap); `MarkdownBlaze` (manual release);
+`plasma-meta` (the KDE app set is already installed: dolphin, konsole, kate, gwenview, okular, spectacle,
+filelight); the PlasmaZones decision (upstream v3.5.1, packaged build stale); `mdmonitor`.
+
 ## 2026-10-17 (night) — the fresh install onto the 9100 PRO, and $HOME mirrored into it
 
 The migration happened. This entry's subject is now a **different machine from the one above** — a

@@ -15,9 +15,11 @@ or changing the system without repeating old diagnostics.
 - **Display manager: differs between the two systems** (2026-10-17). The *old* system used `greetd` with
   the noctalia greeter, as `passwordless-login.md` documents. The *fresh* install ships
   `plasmalogin.service` (Plasma Login Manager) — `greetd`/`noctalia-greeter` are not installed, and
-  neither is sddm or gdm. **Undecided:** keep plasmalogin and configure autologin there, or restore the
-  documented greetd+noctalia chain. Until that is decided the machine boots to a graphical **login
-  prompt with no autologin**, which is a change from the deliberate passwordless posture.
+  neither is sddm or gdm. **Resolved 2026-10-17 by keeping plasmalogin**: autologin now lives in
+  `/etc/plasmalogin.conf` (`[Autologin]` with `User=mylesp` and the `Session=plasma` it already had),
+  so the greetd + noctalia chain in `passwordless-login.md` describes the *old* system only. The
+autologin takes effect at the next boot and is verified by reaching the desktop with no prompt —
+  never by restarting the DM, which would kill the session being worked in.
 - **Pre-rebuild instrumentation lives only on the old disk now**: `boot-capture.{service,timer}` (system
   units) run `/usr/local/bin/boot-capture.sh` 90 s after each boot and write `/var/lib/boot-loop/`,
   but they are installed on the **600p**, not on the new system — they do not travel with `$HOME`.
