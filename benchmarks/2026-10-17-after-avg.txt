@@ -1,0 +1,58 @@
+# AVERAGED FROM benchmarks/2026-10-17-after.txt benchmarks/2026-10-17-after-run2.txt benchmarks/2026-10-17-after-run3.txt
+
+metric                     runs         mean       median          min          max   spread
+boot_total                    3         36.4         36.4         36.4         36.4     0.0%
+boot_userspace                3          6.8          6.8          6.8          6.8     0.0%
+cpu_events_s_1t               3       2088.5       2088.8       2085.7       2091.0     0.3%
+cpu_events_s_24t              3      24945.9      24986.1      24862.5      24989.2     0.5%
+file_rand_read_4k_qd1_iops    3      22333.3      22200.0      22200.0      22600.0     1.8%
+file_rand_read_4k_qd1_mibs    3         87.2         86.8         86.7         88.1     1.6%
+file_rand_read_4k_qd32_iops    3      85866.7      79300.0      73300.0     105000.0    43.2%
+file_rand_read_4k_qd32_mibs    3        335.3        310.0        286.0        410.0    43.4%
+file_rand_write_4k_qd32_iops    3      27600.0      27600.0      26700.0      28500.0     6.7%
+file_rand_write_4k_qd32_mibs    3        107.7        108.0        104.0        111.0     6.7%
+file_seq_read_1m_iops         3       3043.3       3280.0       2538.0       3312.0    30.5%
+file_seq_read_1m_mibs         3       3043.3       3280.0       2538.0       3312.0    30.5%
+file_seq_write_1m_iops        3       3094.0       3089.0       3068.0       3125.0     1.9%
+file_seq_write_1m_mibs        3       3094.7       3089.0       3069.0       3126.0     1.9%
+gpu_fps_1                     3      22706.7      23536.0      20980.0      23604.0    12.5%
+gpu_fps_2                     3      23046.0      24049.0      20743.0      24346.0    17.4%
+gpu_vkmark_score              3      22876.0      23792.0      20861.0      23975.0    14.9%
+mem_mibs_1t                   3      41080.0      40888.3      39948.2      42403.6     6.1%
+mem_mibs_24t                  3     109661.0     109543.2     108679.9     110759.9     1.9%
+openssl_aes_256_gcm_mbs       3       5450.7       5467.0       5401.0       5484.0     1.5%
+openssl_sha256_mbs            3       2297.0       2298.0       2294.0       2299.0     0.2%
+raw_rand_read_4k_qd1_iops     3      14600.0      14700.0      14400.0      14700.0     2.1%
+raw_rand_read_4k_qd1_mibs     3         57.1         57.4         56.4         57.4     1.8%
+raw_rand_read_4k_qd32_iops    3      50766.7      47600.0      45300.0      59400.0    31.1%
+raw_rand_read_4k_qd32_mibs    3        198.3        186.0        177.0        232.0    31.1%
+raw_seq_read_1m_iops          3       4447.7       4399.0       4239.0       4705.0    11.0%
+raw_seq_read_1m_mibs          3       4448.7       4400.0       4240.0       4706.0    11.0%
+
+METRIC|boot_total|36.4|s
+METRIC|boot_userspace|6.8|s
+METRIC|cpu_events_s_1t|2088.5|events/s
+METRIC|cpu_events_s_24t|24945.9|events/s
+METRIC|file_rand_read_4k_qd1_iops|22333.3|IOPS
+METRIC|file_rand_read_4k_qd1_mibs|87.2|MiB/s
+METRIC|file_rand_read_4k_qd32_iops|85866.7|IOPS
+METRIC|file_rand_read_4k_qd32_mibs|335.3|MiB/s
+METRIC|file_rand_write_4k_qd32_iops|27600.0|IOPS
+METRIC|file_rand_write_4k_qd32_mibs|107.7|MiB/s
+METRIC|file_seq_read_1m_iops|3043.3|IOPS
+METRIC|file_seq_read_1m_mibs|3043.3|MiB/s
+METRIC|file_seq_write_1m_iops|3094.0|IOPS
+METRIC|file_seq_write_1m_mibs|3094.7|MiB/s
+METRIC|gpu_fps_1|22706.7|fps
+METRIC|gpu_fps_2|23046.0|fps
+METRIC|gpu_vkmark_score|22876.0|score
+METRIC|mem_mibs_1t|41080.0|MiB/s
+METRIC|mem_mibs_24t|109661.0|MiB/s
+METRIC|openssl_aes_256_gcm_mbs|5450.7|MiB/s
+METRIC|openssl_sha256_mbs|2297.0|MiB/s
+METRIC|raw_rand_read_4k_qd1_iops|14600.0|IOPS
+METRIC|raw_rand_read_4k_qd1_mibs|57.1|MiB/s
+METRIC|raw_rand_read_4k_qd32_iops|50766.7|IOPS
+METRIC|raw_rand_read_4k_qd32_mibs|198.3|MiB/s
+METRIC|raw_seq_read_1m_iops|4447.7|IOPS
+METRIC|raw_seq_read_1m_mibs|4448.7|MiB/s
