@@ -80,6 +80,39 @@ logged-in Plasma would be writing into it during the mirror. Logging in *after* 
 nicest ordering — the new install's first KDE start then happens on top of the mirrored home, which is
 the whole point of doing this verbatim.
 
+**Order on the day — the smoke test comes first, and that is fine.** Install, boot the new system,
+verify it (login, Plasma, GPU, network), run `pacman -Syu`, and *then* mirror:
+
+```text
+install -> boot new + verify -> sudo pacman -Syu -> log out of the desktop -> TTY
+        -> mirror (commands above) -> verify -> log in
+```
+
+`--delete-after` is what makes the smoke test harmless: whatever the first login and the upgrade wrote
+into the new home is deleted by the mirror, so the target's prior state does not matter. What *does*
+matter is when the mirror runs — **with no desktop session on the new system**. KDE rewrites its own
+config at login and logout (`~/.config/ksmserverrc` was rewritten at 15:01 today by a reboot), so
+mirroring from inside a live session, or logging out right afterwards, overwrites parts of the
+verbatim copy with session state.
+
+Three things in this home that are easy to misjudge:
+
+- **The browser profiles are 12.5 G and live in `~/.config`, not `~/.cache`**: `google-chrome` 6.4 G
+  and `google-chrome-canary` 6.1 G (plus `chromium` 394 M). Excluding `~/.cache` does not shrink them,
+  and a verbatim copy takes their internal `Cache/`, `Code Cache/`, `Service Worker/` and `GPUCache/`
+  subdirectories with it. Excluding *those* subdirectories is the one place a smarter rsync would save
+  real time and space without losing anything that matters; `chrome-fixes.md` records which profiles
+  are actually in use.
+- **Session-restore state travels**: `~/.config/session/` (a Dolphin entry from 2026-10-15, a KWin
+  entry from 2026-09-10) and `ksmserverrc`. The new system's first login may therefore try to reopen
+  what was open here. Clearing `~/.config/session/` after the mirror, or setting the login mode to an
+  empty session, is the way to avoid that if it is not wanted.
+- **Per-user flatpaks travel with home** (`~/.local/share/flatpak` 3.4 G, `~/.var/app` 496 K): they
+  are not pacman packages, so nothing needs reinstalling for them — but the new install needs the
+  `flatpak` package itself. The user-scoped `ingetrazo` remote is configured **`no-gpg-verify`**, which
+  is worth re-checking rather than inheriting blindly. Anything installed system-wide (the `flathub`
+  system remote, `/var/lib/flatpak`) is **not** in home and must be set up again.
+
 Sizing, measured 2026-10-17: `$HOME` is **150 GB in 1,881,609 files** and `/home` is at 90 % (25 GB
 free). The copy is metadata-bound, not bandwidth-bound — the old root measures ~8.5k IOPS at 4 KiB
 QD1 — so budget tens of minutes. Largest directories, regenerable ones marked `*`:
@@ -193,6 +226,12 @@ Why `KillUnit … 9` and not a clean restart request: plasmashell handles SIGTER
 event loop, so a shell stuck mid-frame makes systemd wait out its full `TimeoutSec=40sec`.
 
 ## 3. After the first boot
+
+Both measurements below read this repo, which lives in `$HOME` — so they only run **after** §1b's mirror
+has landed (the inventory's "before" copy was taken 2026-10-11 and is already in `~/Documents`). If
+after-boot captures are wanted as well, re-install the boot-capture timer from the pair in
+`customizations.md`: its unit and script live in `/etc` and `/usr/local`, so they do **not** travel with
+home.
 
 ```bash
 scripts/premigration-inventory.sh                     # the "after" copy, then diff the two
