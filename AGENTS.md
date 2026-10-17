@@ -12,12 +12,23 @@ or changing the system without repeating old diagnostics.
 - Plasma was originally incomplete; `plasma-meta` was installed later to finish
   the desktop. Do not assume package state matches a clean stock install.
 - Sessions are Wayland-only. `/usr/share/xsessions/` is expected to be empty.
-- The display manager is `greetd` with the noctalia greeter. `sddm` and `gdm`
-  may be installed, but they are deliberately disabled.
-- **Pre-rebuild instrumentation is installed and is temporary**: `boot-capture.{service,timer}`
-  (system units) run `/usr/local/bin/boot-capture.sh` 90 s after each boot and write
-  `/var/lib/boot-loop/`. Remove it when the boot loop is over — the install/undo pair is in
-  `customizations.md`, 2026-10-17 (evening).
+- **Display manager: differs between the two systems** (2026-10-17). The *old* system used `greetd` with
+  the noctalia greeter, as `passwordless-login.md` documents. The *fresh* install ships
+  `plasmalogin.service` (Plasma Login Manager) — `greetd`/`noctalia-greeter` are not installed, and
+  neither is sddm or gdm. **Undecided:** keep plasmalogin and configure autologin there, or restore the
+  documented greetd+noctalia chain. Until that is decided the machine boots to a graphical **login
+  prompt with no autologin**, which is a change from the deliberate passwordless posture.
+- **Pre-rebuild instrumentation lives only on the old disk now**: `boot-capture.{service,timer}` (system
+  units) run `/usr/local/bin/boot-capture.sh` 90 s after each boot and write `/var/lib/boot-loop/`,
+  but they are installed on the **600p**, not on the new system — they do not travel with `$HOME`.
+  Remove them there when the loop is over; the install/undo pair is in `customizations.md`,
+  2026-10-17 (evening).
+- **The current system (2026-10-17 night)**: fresh CachyOS Plasma on the **9100 PRO in the CPU slot**
+  (`0000:01:00.0`, `LnkSta 16GT/s ×4`), machine-id `61c3877c…`, layout `p2` ESP + `p3` btrfs with
+  `@ @home @root @srv @cache @tmp @log`. `$HOME` was mirrored from the old system and verified
+  (1,681,377 files, 134 GB). The **Intel 600p with the old install is still attached** in the chipset
+  slot as the fallback, and its `@home` is the authoritative copy of everything — mount it read-only
+  with `sudo mount -o ro,subvol=/@home /dev/disk/by-uuid/6ed46d55-71f2-47a0-9ee9-b8bf035d8c88 /mnt/oldhome`.
 - **The browser profiles were deleted on 2026-10-17**, deliberately, ahead of the rebuild: the three
   Chrome-family profiles plus Firefox's, their caches, and a `no-gpg-verify` flatpak remote's leftovers.
   The packages are still installed and will start fresh profiles; a missing profile is not a fault to

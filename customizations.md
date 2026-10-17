@@ -4696,6 +4696,59 @@ Anything wanted from it had to be taken out of the snapshot before this ran, and
     do:    sudo btrfs subvolume delete /.snapshots/home-before-browser-wipe-2026-10-17-1514
     undo:  none — the data is gone; the only remaining recovery path would be a backup made beforehand.
 
+## 2026-10-17 (night) — new system: install, home mirror, and the manual artifacts
+
+The 9100 PRO went in (CPU slot, `0000:01:00.0`, `LnkSta 16GT/s ×4` — Gen5 trained down to Gen4, which is
+the acceptance test `storage-migration.md` asks for), CachyOS Plasma was installed on it, and `$HOME`
+was mirrored across. New machine-id `61c3877c118b4b0387c55fe455349738`; layout `p1` 1 M, `p2` 4 G ESP,
+`p3` btrfs with `@ @home @root @srv @cache @tmp @log`; user `mylesp` uid/gid 1000; shell bash.
+
+    do:    sudo rsync -aHAX --numeric-ids --delete-after /mnt/oldhome/mylesp/ /home/mylesp/
+    undo:  the old @home is intact on the 600p — copy any file back from /mnt/oldhome/mylesp/
+           (mount: sudo mount -o ro,subvol=/@home /dev/disk/by-uuid/6ed46d55-71f2-47a0-9ee9-b8bf035d8c88 /mnt/oldhome)
+
+**The mirror's incident, and why the plan's rule was right.** The intended read-only snapshot of `@home`
+was never created — the call that should have made it returned no output and died before that step — so
+the mirror ran from the **live** home. Cost: **166 files** the old system wrote after rsync had walked
+past them (`.cache/ksvg-elements`, `kwinsession.kcache`, `ksplash/…`, `mesa_shader_cache/index`,
+`plasmazones-pipeline.cache`, `kconf_updaterc`, `kglobalshortcutsrc`) — none of them documents or
+substantive configuration. A second pass from the old @home, mounted read-only and therefore
+quiescent, closed all 166. **Verified**: 1,681,377 old files vs 1,681,447 new (134 GB both), and the
+only remaining differences are 24 files this very session is writing (`.pi/context-mode/*.db-shm`,
+`.pi-lens/instances.json`, `opencode.db-shm`, one uv cache entry). That is exactly the race §1b warns
+about, and the cure is the one it prescribes: a frozen source.
+
+Restored manual artifacts, each verified, each with its undo:
+
+| Artifact | Undo |
+|---|---|
+| `/etc/sudoers.d/99-nopasswd` (the owner ran this one) | `sudo rm /etc/sudoers.d/99-nopasswd` |
+| `/etc/polkit-1/rules.d/49-nopasswd-wheel.rules` — `pkcheck` returns `polkit.result=yes` | `sudo rm` it |
+| `nowatchdog` removed from `/etc/default/limine` + `limine-update`; `/boot/limine.conf` now reads `quiet splash …` | restore `/etc/default/limine.bak-<stamp>` + `limine-update` |
+| `/etc/sysctl.d/99-recovery.conf` (`panic=15`, `hardlockup_panic=1`, `nmi_watchdog=1`) | `sudo rm` + `sudo sysctl --system` |
+| `getty@tty3` autologin drop-in, derived from the unit's own `ExecStart` so it matches this install — active | `sudo rm -rf /etc/systemd/system/getty@tty3.service.d && sudo systemctl daemon-reload && sudo systemctl disable --now getty@tty3` |
+| `/etc/systemd/journald.conf.d/50-retention.conf` (`SystemMaxUse=2G`) — effective | `sudo rm` + `sudo systemctl restart systemd-journald` |
+| panel wedge watchdog (`/usr/local/bin` + 2 units) and `/etc/plasmashell-wedge-watch.autokill` — timer enabled, probe silent, only `.spin` in `/var/log/plasmashell-wedge/` | `sudo systemctl disable --now plasmashell-wedge-watch.timer && sudo rm` the three files + daemon-reload |
+| `keyd` installed, `/etc/keyd/default.conf` (`capslock = overload(control, esc)`, `print = f13`, `rightmeta`), enabled; snapper pre **7** / post **8**; `keyd check` clean | `sudo pacman -Rns keyd` + `sudo rm -rf /etc/keyd` |
+
+**One thing did not carry over and needs a decision: the display manager.** This install ships
+`plasmalogin.service` (Plasma Login Manager); `greetd` and `noctalia-greeter` are not installed. So the
+greetd+noctalia chain in `passwordless-login.md` describes the *old* system. Either keep plasmalogin and
+configure autologin there (DE-native, one fewer moving part), or install greetd+noctalia and restore the
+documented chain. **Undecided** — and the machine therefore boots to a graphical login prompt with **no
+autologin**, which is a departure from the deliberate passwordless posture.
+
+`kernel.nmi_watchdog` still reads **0** on the running kernel because it booted with `nowatchdog`; the
+sysctl and the cmdline are both fixed, so it applies at the next boot — which is how the 2026-10-14
+verification was done as well.
+
+Pending: the display-manager decision; `MarkdownBlaze` (the package is not installed here, so its
+wrapper alone would be pointless — it needs the GitHub release re-downloaded and checksum-matched per
+the 2026-10-06 entry); `mdmonitor` (still fails: no `MAILADDR` — configure it or mask the unit); the
+after-benchmark (`scripts/system-benchmark.sh after` ×3 → `--average` → `--diff` against
+`benchmarks/2026-10-17-before-avg.txt`); `scripts/premigration-inventory.sh` plus its diff; and the old
+disk's leftover `/.snapshots` and boot-capture units.
+
 ## 2026-10-17 (night) — the fresh install onto the 9100 PRO, and $HOME mirrored into it
 
 The migration happened. This entry's subject is now a **different machine from the one above** — a
