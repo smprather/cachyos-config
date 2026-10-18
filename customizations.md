@@ -4849,6 +4849,10 @@ if the autologin change does not work, logging in by hand still brings the agent
            ~/.pi/post-reboot-continue.txt           self-contained instruction + checklist
     undo:  rm -f those three files                   (the wrapper removes the .desktop on first run)
 
+> **Superseded in one detail** — this recipe launched pi without `cd`-ing into the repo, so the
+> resumed session started in `$HOME` and every relative path resolved there. The corrected `do:`
+> line is in "the reboot trigger must cd into the repo" below.
+
 The prompt file is deliberately self-contained — verify the reboot, remove the trigger, finish the
 software restore (chaotic-aur, MarkdownBlaze, PlasmaZones, mdmonitor), run the inventory diff, commit —
 because the resumed session may arrive post-compaction and must not depend on remembering this
@@ -5246,3 +5250,33 @@ Performance measured rather than guessed, because Electron was the objection:
 For scale on this box: `plasmashell` alone sits at 846 MB and `kwin_wayland` at
 512 MB, with 26 GB of 31 GB free. Obsidian costs about one more plasmashell. It
 does not drive like a Datsun 210 — the 944 MB is the real price, the CPU is not.
+
+## 2026-10-17 (late) — the reboot trigger must cd into the repo before launching pi
+
+The one-shot trigger fired correctly, but it launched pi from `$HOME`:
+
+    ~/.config/autostart/pi-continue.desktop  ->  alacritty -e pi -c "$(cat ~/.pi/post-reboot-continue.txt)"
+
+so the resumed session's working directory was `/home/mylesp` rather than
+`/home/mylesp/cachyos-config`. The instruction file was self-contained about *what*
+to do and silent about *where*, and every path in it is repo-relative —
+`scripts/premigration-inventory.sh`, `inventories/<date>.redacted.txt.gz`,
+`.gitignore`, the repo's own `.md` files. Two checks silently resolved against the
+wrong root because of it: a `[ -f inventories/… ]` that reported a committed file
+as MISSING, and a screenshot path. `pwd` had to be asked for before the cause was
+obvious, which is exactly the kind of wrong-root bug that reads as a broken file.
+
+Corrected recipe for the next reboot-gated verification:
+
+    do:   ~/.local/bin/pi-continue-once            wrapper; removes the trigger, then execs pi
+          ~/.config/autostart/pi-continue.desktop  the trigger itself (self-deleting)
+          ~/.pi/post-reboot-continue.txt           self-contained instruction + checklist
+          # the wrapper must exec from the repo root, not from $HOME:
+          #   cd /home/mylesp/cachyos-config && exec pi -c "$(cat ~/.pi/post-reboot-continue.txt)"
+    undo: rm -f those three files                   (the wrapper removes the .desktop on first run)
+
+The rule, so it is not relearned: **a resume trigger has to set the cwd as well as
+the prompt.** A prompt file can be perfectly self-contained and still be useless if
+the shell it lands in is in the wrong directory, because every path in this repo is
+written relative to the repo root. The same bug shape as the `test -e '~/.config/x'`
+trap in `AGENTS.md`: the command succeeds, the answer is wrong.

@@ -78,6 +78,32 @@ per-boot snapshot, so match by model, not name):
 - Root (`nvme1n1p2`) is at **89 %** — 28 GiB free — against the cache budget in
   [build-caches.md](build-caches.md).
 
+
+### RAM upgrade — watched for a sale, not ordered
+
+Two DIMM slots are free and the ceiling is 128 GiB (`dmidecode -t 16`), so the
+cheapest route to 64 GiB is a second identical kit. The choice is a **speed**
+question, not a capacity one:
+
+| path | after | slots left | realistic speed | note |
+| --- | --- | --- | --- | --- |
+| second `CMK32GX4M2D3600C18` (2×16) | 4 × 16 GiB = 64 GiB | 0 | **2933–3200** (AMD table: 2667) | cheapest; fills both empty `DIMM 0` |
+| one 2×32 GiB kit | 2 × 32 GiB = 64 GiB | 2 | 3600 attainable | retires the 2×16; leaves room for 128 GiB |
+
+**The caveat worth remembering.** Both current modules are **dual-rank** at
+DDR4-3600 via XMP, which is already above AMD's 3200 entry for two dual-rank
+DIMMs. AMD's table for **four** dual-rank DIMMs is **2667**, and practice usually
+lands 2933–3200 after tuning. Doubling capacity this way therefore buys memory at
+the cost of bandwidth — worth deciding which is wanted *before* a sale decides it.
+
+**Buy criteria:** exact part number `CMK32GX4M2D3600C18` (Vengeance LPX 2×16 GB,
+DDR4-3600 CL18). A later production batch can differ in IC revision even at the
+same PN, so budget for tuning SOC/VDDIO and `procODT` rather than assuming XMP
+holds across four sticks. Do not trust SMBIOS for the XMP voltage — it reports
+1.2 V here where these kits profile at 1.35 V.
+
+**Verify after fitting:** `sudo dmidecode -t 17 | grep -E 'Size|Configured Memory Speed|Part Number'`
+and `free -h`. Regenerate the whole survey with `scripts/hardware-check.sh`.
 ## Session
 
 - Distribution: CachyOS, originally installed from the Hyprland edition
