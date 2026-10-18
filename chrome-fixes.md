@@ -68,6 +68,15 @@ not the driver and not the flags — check the launching shell for `LIBGL_ALWAYS
 first (`tr '\0' '\n' </proc/$(pgrep -x plasmashell)/environ | grep -E 'LIBGL|MESA|__EGL'`).
 Shells started before the fix kept the vars until they exited; a reboot clears them all.
 
+Postscript, same night: the journal made the diagnosis ironclad. The pre-fix Chrome
+instance (launched 21:23 from the still-contained panel) logged `WebGL1 blocklisted`
+repeatedly until the user closed it at ~00:44; the replacement instance launched from
+the cleaned panel has logged no GL errors at all. One transient on its **first-ever
+load of a lidar-terrain WebGL app on the fresh profile**: the ground mesh rendered
+black while everything else drew, and a single refresh fixed it — a cold-cache/first-load
+data hiccup, not a driver symptom (driver faults are deterministic and do not heal on
+refresh). If it ever recurs, capture the page console *before* refreshing.
+
 ## Native Wayland confirmed (2026-10-04)
 
 `--ozone-platform=x11` was inherited from Canary-era work on 2026-09-07 and had
