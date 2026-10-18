@@ -79,22 +79,32 @@ per-boot snapshot, so match by model, not name):
   [build-caches.md](build-caches.md).
 
 
-### RAM upgrade — watched for a sale, not ordered
+### RAM upgrade — decided 2026-09-28, waiting for a price, not ordered
 
-Two DIMM slots are free and the ceiling is 128 GiB (`dmidecode -t 16`), so the
-cheapest route to 64 GiB is a second identical kit. The choice is a **speed**
-question, not a capacity one:
+**Decided 2026-09-28:** when RAM becomes affordable, add a **second identical kit** —
+another Corsair Vengeance LPX `CMK32GX4M2D3600C18` (2×16 GB). Recorded at the time as
+"*you have to work with RAM constraints until RAM becomes more affordable. when that
+happens, i'll add another 32GB to my system*" (session `01a0d759`), and worked through
+the same day in session `01a0e4b9`. Both `DIMM 0` slots are empty and the ceiling is
+128 GiB (`dmidecode -t 16`), so this lands at 4 × 16 GiB = 64 GiB and retires nothing.
 
-| path | after | slots left | realistic speed | note |
+| path | after | slots left | speed outlook | when to prefer it |
 | --- | --- | --- | --- | --- |
-| second `CMK32GX4M2D3600C18` (2×16) | 4 × 16 GiB = 64 GiB | 0 | **2933–3200** (AMD table: 2667) | cheapest; fills both empty `DIMM 0` |
-| one 2×32 GiB kit | 2 × 32 GiB = 64 GiB | 2 | 3600 attainable | retires the 2×16; leaves room for 128 GiB |
+| **second `CMK32GX4M2D3600C18`** (2×16) — *the plan* | 4 × 16 GiB = 64 GiB | 0 | 3600 likely, may need a BIOS nudge | default: the same part number is the best predictor that four DIMMs train together |
+| one 2×32 GiB kit | 2 × 32 GiB = 64 GiB | 2 | 3600 easily | only if four sticks refuse 3600 *and* bandwidth matters more than price |
 
-**The caveat worth remembering.** Both current modules are **dual-rank** at
-DDR4-3600 via XMP, which is already above AMD's 3200 entry for two dual-rank
-DIMMs. AMD's table for **four** dual-rank DIMMs is **2667**, and practice usually
-lands 2933–3200 after tuning. Doubling capacity this way therefore buys memory at
-the cost of bandwidth — worth deciding which is wanted *before* a sale decides it.
+**Speed caveat, stated in both directions.** Both current modules are **dual-rank**,
+the harder case for the Zen 3 memory controller. AMD's *guaranteed* table for four
+dual-rank DIMMs is **2667** (3200 for two), so 3600 across four sticks is not
+contractual — Zen 3 usually trains 4×16 GB at 3600, with SoC/latency tuning if not,
+and a 3200/2933 fallback is normal. Treat 3600 as likely rather than certain, and
+treat 3200 as an acceptable outcome rather than a failure.
+
+**SMBIOS reports SPD nominal voltage, not the applied VDIMM.** The 2026-09-28 session
+read the reported `1.2 V` as "JEDEC, not the XMP profile"; that inference is wrong.
+The kit is in fact running 3600 MT/s with XMP applied (this line said so), and
+dmidecode cannot see what the BIOS actually set. Do not use the voltage field to
+judge whether XMP is active.
 
 **Buy criteria:** exact part number `CMK32GX4M2D3600C18` (Vengeance LPX 2×16 GB,
 DDR4-3600 CL18). A later production batch can differ in IC revision even at the
