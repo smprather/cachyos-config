@@ -64,7 +64,14 @@ drive.
   written — the enumeration has swapped since; see the 2026-10-10 note below and identify
   disks by model or PARTUUID, never by `/dev/nvmeXnY`.)
 
-**Cloning Windows is not part of this plan.** If it ever becomes necessary: clone
+  **2026-10-17: the 980 PRO is not attached.** CachyOS has been rebuilt onto the 9100 PRO in
+  the CPU slot, and the machine now sees only two NVMe devices (`nvme0n1` = 9100 PRO,
+  `nvme1n1` = 600p). So "the 980 PRO stays in the chipset slot" describes this plan as
+  *written*, not the current machine: the Windows disk is absent, and both ESPs it refers to
+  are off-system for now. The separate-ESP reasoning still holds for whenever a disk is added
+  back — it is a rule about boot safety, not about that particular drive.
+
+  **Cloning Windows is not part of this plan.** If it ever becomes necessary: clone
 `nvme1n1` p1/p2/p3 (and p4) offline, target needs ≥ 389 GB free, and let Windows rebuild its
 own boot entry with `bcdboot <target>\Windows /s <target ESP> /f UEFI` — the ESP is mandatory,
 because Windows' BCD lives inside it. Note the only currently free space is on the two

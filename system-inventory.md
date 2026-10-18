@@ -31,13 +31,15 @@ Verified 2026-10-06 by [hardware-check.md](hardware-check.md) — regenerate wit
   read from the efivar directly).
 - Display: a single 3440×1440 @ 59.97 Hz panel on HDMI at scale 1 — this is the "this
   display" referred to in [text-rendering-quality-tools.md](text-rendering-quality-tools.md).
-- Storage: root is `nvme1n1`, an **INTEL SSDPEKKW256G7** (238.5 GB) with 33.5 TB written,
-  38,280 power-on hours and 13% rated wear; `/boot` is `nvme1n1p1` (vfat) and everything else
-  lives on `nvme1n1p2` (btrfs, `noatime,compress=zstd:1,discard=async`) in the subvolumes
-  `@ @root @home @srv @cache @log @tmp`. `nvme0n1` is a **Samsung 980 PRO 1 TB** (1,981 h, 3%
-  wear) holding a Windows install (487 GB NTFS plus its EFI/recovery partitions) and an
-  **unmounted** 443 GB btrfs partition. SATA disks: `sda` 12 TB IronWolf (5.5 TB NTFS +
-  5.5 TB btrfs), and `sdb` 3 TB Hitachi carrying a **degraded RAID-1** — `/dev/md127`,
+- Storage: root is `nvme0n1p3` on the **Samsung 9100 PRO 1TB** (931.5 GB) in the CPU slot
+  (`0000:01:00.0`, `LnkSta 16GT/s ×4` — a Gen5 drive training down to this board's Gen4 root
+  port), btrfs `noatime,compress=zstd:1,ssd,discard=async`, `root=UUID=4a51f320…`, subvolumes
+  `@ @root @home @srv @cache @log @tmp`, `/boot` on `nvme0n1p2` (vfat). `nvme1n1` is the
+  retired **INTEL SSDPEKKW256G7** (238.5 GB, 33.5 TB written, 38,280 h, 13 % wear) still
+  attached in the chipset slot (`04:00.0`, 8 GT/s ×4) as the bootable fallback holding the
+  previous install. The **Samsung 980 PRO is not attached** — it held Windows, and this
+  machine currently has no Windows disk at all. SATA disks: `sda` 12 TB IronWolf (5.5 TB NTFS
+  + 5.5 TB btrfs), and `sdb` 3 TB Hitachi carrying a **degraded RAID-1** — `/dev/md127`,
   `[2/1] [U_]`, one member missing, active auto-read-only and not mounted, so no live data
   depends on it.
 - Network: Realtek RTL8125 2.5 GbE and an RTL8852CE 802.11ax adapter. Audio: AMD
@@ -68,15 +70,17 @@ Peripherals the machine cannot name (verified 2026-10-17; **supplied by hand** �
   hubs in the same tree, consistent with the dock; nothing distinguishes its hubs from the
   monitor's by name.
 
-Storage drift since the 2026-10-06 survey (from the 2026-10-17 run; `nvmeXnY` labels are a
-per-boot snapshot, so match by model, not name):
+Storage drift since the 2026-10-06 survey (`nvmeXnY` labels are a per-boot snapshot, so match
+by model or PARTUUID, never by name):
 
-- The 443 GB btrfs partition on the Samsung 980 PRO has **no filesystem now** — `blkid` returns
-  only a PARTUUID. Its contents were rescued to `~/Documents/rescued-nvme1n1p5-2026-10-11/`.
-- `sda3` (12 TB IronWolf, btrfs) is mounted **read-only** at `/mnt/12TB_2`, and **not via
-  `/etc/fstab`**, so the mount does not survive a reboot.
-- Root (`nvme1n1p2`) is at **89 %** — 28 GiB free — against the cache budget in
-  [build-caches.md](build-caches.md).
+- The 443 GB btrfs partition that was on the Samsung 980 PRO has **no filesystem** — `blkid`
+  returns only a PARTUUID — and that disk is no longer attached. Its contents were rescued to
+  `~/Documents/rescued-nvme1n1p5-2026-10-11/` **before** it went, and that copy is now the only
+  copy.
+- `sda3` (12 TB IronWolf, btrfs) is **not mounted** on this install and has no `/etc/fstab`
+  entry; mount it by hand if that data is wanted.
+- Root (`nvme0n1p3`, the 9100 PRO) is at **16 % — 779 GiB free**, so the cache budget in
+  [build-caches.md](build-caches.md) is no longer under pressure.
 
 
 ### RAM upgrade — decided 2026-09-28, waiting for a price, not ordered
@@ -108,7 +112,7 @@ judge whether XMP is active.
 
 **Buy criteria:** exact part number `CMK32GX4M2D3600C18` (Vengeance LPX 2×16 GB,
 DDR4-3600 CL18). A later production batch can differ in IC revision even at the
-same PN, so budget for tuning SOC/VDDIO and `procODT` rather than assuming XMP
+same part number, so budget for tuning SOC/VDDIO and `procODT` rather than assuming XMP
 holds across four sticks. Do not trust SMBIOS for the XMP voltage — it reports
 1.2 V here where these kits profile at 1.35 V.
 

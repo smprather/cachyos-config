@@ -5151,10 +5151,11 @@ triage of the "not ignorable" categories the script defines:
     `ghostscript` **is installed** (10.08.0-1.1) as a dependency — it appears in the
     `-Qqe` diff only because it is no longer *explicit*. The explicit-package diff
     over-reports; always confirm a "gone" package with `pacman -Q` before restoring it.
-  - *unresolved, user's call* — `entr`, `starship`, `luarocks`, `sweethome3d`, and
-    the foreign `blt-git`. These are tools someone asked for once; nothing in the
-    repo says whether they are still wanted. Each confirmed genuinely absent with
-    `pacman -Q`. Not installed.
+  - *unresolved, user's call* — `entr`, `luarocks`, `sweethome3d`, and the foreign
+    `blt-git`. These are tools someone asked for once; nothing in the repo says
+    whether they are still wanted. Each confirmed genuinely absent with `pacman -Q`.
+    (`starship` was on this list; it has since been installed and enabled — see
+    2026-10-17 (late), "starship enabled the loadout way".)
 
 Both inventory copies stay in `~/Documents/`; the redacted one is the committed
 artifact.
@@ -5280,3 +5281,61 @@ the prompt.** A prompt file can be perfectly self-contained and still be useless
 the shell it lands in is in the wrong directory, because every path in this repo is
 written relative to the repo root. The same bug shape as the `test -e '~/.config/x'`
 trap in `AGENTS.md`: the command succeeds, the answer is wrong.
+
+## 2026-10-17 (late) — starship enabled the loadout way; hardware docs corrected to the rebuilt machine
+
+### starship switched on through loadout, not through `.bashrc`
+
+The switch already existed in the startup system. `~/.config/bash/global/bashrc` ends
+its prompt block with either starship or `set_prompt`:
+
+    if is_truthy "${LOADOUT_CFG_ENABLE_STARSHIP}" && command -v starship >/dev/null; then
+        export STARSHIP_CONFIG="$BASH_CONFIG_ROOT_DIR/../starship/starship.toml"
+        eval "$(starship init bash)"
+    else
+        set_prompt
+    fi
+
+so the entire change is one line in the documented user-override layer:
+
+    ~/.config/bash/user/config.sh    export LOADOUT_CFG_ENABLE_STARSHIP="1"
+    # undo: delete that line (the starship package can stay installed)
+
+**Not** an `eval "$(starship init bash)"` line in `~/.bashrc`. That file is
+loadout-generated — double-source guard, full function wipe, layer cascade — so a
+hand edit there is overwritten on the next loadout run; and per
+`~/.config/bash/global/README.md`, wrapping that eval with `unset`/`export
+PROMPT_COMMAND` wipes bash-preexec's driver so `starship_precmd` never fires, which
+is the documented "no Starship prompt at login but correct after `exec bash`" bug.
+
+Verified under a **real PTY** (`script -qec 'bash -i'`), because `bash -lic` runs no
+prompt cycle and reports a false negative. It did exactly that on the first attempt
+here, which is why "not active" was believed for a few minutes:
+
+    prompt             ~ ❯  (colour, rendered by starship)
+    precmd_functions   (starship_precmd loadout_restore_echo loadout_save_history precmd)
+    PROMPT_COMMAND     __bp_precmd_invoke_cmd …  (bash-preexec driver, untouched)
+    STARSHIP_CONFIG    ~/.config/starship/starship.toml   (1465 B, from 2026-08-29)
+
+starship hooked into the framework's `precmd_functions` array and left
+`PROMPT_COMMAND` alone — the topology the README prescribes.
+
+### Hardware docs corrected to the rebuilt machine
+
+`system-inventory.md` still described the *previous* install as current: root on the
+Intel 600p, `nvme0n1` as the Windows 980 PRO, and root "at 89 %, 28 GiB free". All
+three were true of the old machine and none of the new one. Corrected against live
+state and the already-current `hardware-check.md`:
+
+- root is `nvme0n1p3` on the **9100 PRO**, 16 %, 779 GiB free
+- the 600p is the idle bootable fallback in the chipset slot
+- **the 980 PRO is not attached**, so its 443 GB rescue at
+  `~/Documents/rescued-nvme1n1p5-2026-10-11/` is now the only copy
+- `sda3` is no longer mounted and has no fstab entry
+
+`storage-migration.md` got the matching note: "the 980 PRO stays in the chipset
+slot — Windows is not moved" describes the plan as written, not this machine. The
+separate-ESP rule still stands for whenever a disk is added back; it is a rule about
+boot safety, not about that particular drive.
+
+Nothing here changed system state apart from the one `user/config.sh` line.
