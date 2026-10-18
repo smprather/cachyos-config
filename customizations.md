@@ -5154,3 +5154,29 @@ triage of the "not ignorable" categories the script defines:
 
 Both inventory copies stay in `~/Documents/`; the redacted one is the committed
 artifact.
+
+## 2026-10-17 (late) — MarkdownBlaze removed: it never rendered
+
+Follow-on to the 2026-10-17 (late) entry, which recorded it as installed but not
+rendering. Confirmed unusable rather than flaky, so it is gone.
+
+    sudo pacman -Rns --noconfirm markdownblaze
+    sudo rm -f /usr/local/bin/MarkdownBlaze
+    # undo: sudo pacman -U ~/Documents/../markdownblaze-1.0.26-1-x86_64.pkg.tar.zst
+    #       and re-create the wrapper — but see the prohibition in standard-tools.md,
+    #       which says not to reinstall it until upstream fixes rendering.
+
+Snapshots 36/37. **250 MiB reclaimed**; the package was the only thing requiring
+`webkit2gtk-4.1` (141 MiB) and it dragged seven more orphans with it — `enchant`,
+`harfbuzz-icu`, `hyphen`, `libmanette`, `woff2`, `xdg-dbus-proxy`. Root filesystem
+went 146 G → 148 G used and back to 779 G free.
+
+Verified gone: package, `/usr/local/bin/MarkdownBlaze`, `/usr/bin/MarkdownBlaze`,
+`/opt/markdownblaze`, and the desktop entry all absent; `command -v MarkdownBlaze`
+empty. The catalogue row was deleted and replaced with a "Do not install" note,
+per the net-state rule — a tool that is absent should not read as installed, but
+the *bug that caused the removal* is worth keeping because it stops someone
+repeating it.
+
+Still without a working offline Markdown reader; the replacement is a separate
+decision and will be its own entry.

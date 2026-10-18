@@ -14,7 +14,6 @@ part of the preferred setup; record detailed diagnosis and changes in
 | Resources | Graphical system and process monitor | `resources` | GNOME Circle application; usable from Plasma and other desktops. |
 | btm | Terminal system/process monitor | `cargo:bottom` | Installs the `btm` executable; the `bottom` crate provides a configurable TUI with CPU, memory, disk, network, process, and GPU views. |
 | nvglances | NVIDIA-focused terminal system monitor | `cargo:nvglances` | Rust TUI using NVML; shows CPU, memory, network, GPU utilization, and GPU processes. |
-| MarkdownBlaze | Offline Markdown viewer (read-only) | upstream Arch package, installed with `pacman -U` | WebKitGTK/GTK3 + Photino. **Currently broken — it does not render on this box.** As of 1.0.26 (2026-10-17) it opens a window and paints a black content area (~99.7% black, 6 colours, no document loaded). The old `WEBKIT_DISABLE_DMABUF_RENDERER=1` wrapper is still installed at `/usr/local/bin/MarkdownBlaze` but **has no effect**: captures are byte-identical with and without it, as are the Mesa-EGL-pin settings that contained plasmashell. The 1.0.23 failure signature (`Gdk-Message: Error 71 (Protocol error)`) is gone, so **absence of that error no longer means it works** — only a screen grab showing rendered content does. No AUR package exists; the shipped desktop entry uses a bare `Exec=MarkdownBlaze`, so the wrapper covers menu and MIME launches. Listed with the other unowned shims in `system-inventory.md`. Next step is the upstream tarball or pinning 1.0.23. See `customizations.md` 2026-10-17 (late). |
 | Konsole | KDE terminal emulator | `konsole` | KDE-native terminal, installed 2026-10-11 (26.08.2-1.1 from `cachyos-extra-v3`). Completes the Plasma application set; `alacritty` ("atty") remains the daily driver. |
 | fixpanel | One-word recovery for a frozen Plasma panel | user-local: repo `bin/fixpanel`, symlinked into `~/.local/bin` | Added 2026-10-14 after plasmashell froze with its main thread pinned in Qt's EGL fallback retry. Restarts only the shell (`systemctl --user kill -s KILL` + start, then polls the D-Bus probe); open apps and terminals are untouched. The automatic equivalent is `plasmashell-wedge-watch` with its autokill flag. Do not hold the power button instead — the machine is alive when the panel is not. See `plasmashell-wedge.md`. |
 | nvidia-driver-watch | Weekly notice when a newer NVIDIA driver is in the repos | user-local: repo `bin/nvidia-driver-watch.sh` + `~/.config/systemd/user/nvidia-driver-watch.{service,timer}` | Added 2026-10-14 because the NVIDIA driver is the last unresolved suspect for the panel freeze and testing one means staying on it for days — without this, "pinned for a test" becomes "pinned forever". Logs to the user journal; also prints the test order for a new driver. `systemctl --user disable --now nvidia-driver-watch.timer` to remove. |
@@ -41,3 +40,33 @@ part of the preferred setup; record detailed diagnosis and changes in
 | netgen | Automatic 3D tetrahedral mesh generator | `netgen-git` (AUR) | Installed 2026-10-17 with `paru -S netgen-git` — in no binary repo, so it is a local build (6.2.2608.r60.g1507093-1). Binary `/usr/bin/netgen`. Undo: `sudo pacman -Rns netgen-git`. |
 | magic | VLSI layout system | `magic` (AUR) | Installed 2026-10-17 with `paru -S magic` (8.3.685-1). Pairs with `klayout`/`iverilog` in the EDA set. Binary `/usr/bin/magic`. Undo: `sudo pacman -Rns magic`. |
 | PlasmaZones | Window tiling / autotiling for KWin | `plasmazones` (cachyos) | Installed 2026-10-17 at **3.4.19-1** and kept deliberately: on `kwin 6.8.0` it runs `active` + `enabled`, ships `kwin_effect_plasmazones.so`, and produces **zero** `Compositor bridge did not register` lines across a whole boot. Upstream is 3.5.1, but building it locally was rejected — it would add a rebuild-on-every-kwin-upgrade burden for a defect that does not reproduce. Re-test after any kwin major bump by counting `Compositor bridge did not register` over `journalctl --user -b`, and only then build 3.5.1. Undo: `sudo pacman -Rns plasmazones`. |
+
+## Do not install MarkdownBlaze
+
+An offline Markdown viewer (`bwets/MarkdownBlaze`, WebKitGTK/GTK3 + Photino) that
+**does not render on this machine**. Installed and verified twice:
+
+- **1.0.23** (2026-10-06): dies with `Gdk-Message: Error 71 (Protocol error)
+  dispatching to Wayland display`, no document loaded.
+- **1.0.26** (2026-10-17): opens a window and paints a black content area
+  (~99.7% black, 6 distinct colours) with or without a document argument. It stays
+  alive and logs **no error at all**, which is worse than the crash.
+
+The workaround this repo used to document — `/usr/local/bin/MarkdownBlaze` running
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` — **has no effect on 1.0.26**: captures are
+byte-identical with and without it, as are the Mesa-EGL-pin settings that
+containered plasmashell on 2026-10-14.
+
+Two traps, both worth keeping:
+
+1. **The old acceptance test is obsolete.** "No `Protocol error` in the log" now
+   passes on a completely blank window. The only valid check is a screen grab
+   showing rendered content.
+2. **Its SHA256SUMS prefixes `./arch/`**, so `sha256sum -c` verifies nothing —
+   compare the hash by hand against the exact asset line.
+
+Removed 2026-10-17 (snapper 36/37, 250 MiB reclaimed; the package alone pulled
+`webkit2gtk-4.1`, `enchant`, `harfbuzz-icu`, `hyphen`, `libmanette`, `woff2`,
+`xdg-dbus-proxy`). Do not reinstall it without first checking whether upstream has
+fixed rendering on WebKitGTK + NVIDIA Wayland — verified by screen grab, never by
+absence of an error string.
