@@ -5180,3 +5180,69 @@ repeating it.
 
 Still without a working offline Markdown reader; the replacement is a separate
 decision and will be its own entry.
+
+## 2026-10-17 (late) — starship off loadout onto the system; Obsidian replaces MarkdownBlaze
+
+### starship: loadout's unowned copy deleted, system package installed
+
+It was believed to be in use from loadout. It was loadout's — and it was **not
+in use at all**:
+
+    command -v starship        # /home/mylesp/.local/share/loadout/bin/starship (1.26.0)
+    pacman -Qo <that path>     # No package owns it
+
+    rm -f ~/.local/share/loadout/bin/starship
+    sudo pacman -Syu --noconfirm starship
+    # undo: sudo pacman -Rns starship
+
+Snapshots 38/39. Verified: `command -v starship` is now `/usr/bin/starship`,
+`1.27.0-1` (was 1.26.0), owned by the package, loadout copy absent, and
+`starship prompt` really emits one (`/tmp via  v26.11.1  ❯`).
+
+**It is installed but not wired, and this entry exists so nobody assumes
+otherwise.** No shell startup file mentions it — checked `~/.bashrc`,
+`~/.bash_profile`, `~/.profile`, `~/.bash_aliases`, `~/.bash_login`, `~/.zshenv`,
+`~/.zshrc`, `~/.config/fish/config.fish`, `/etc/bash.bashrc`, `/etc/profile` and
+`/etc/profile.d/*.sh` — there is no `~/.config/starship.toml`, and the live
+prompt is still the stock bash `[\u@\h \W]\$` with `PROMPT_COMMAND` from
+bash-preexec. Loadout's `prefer/` mechanism (which does redirect `tmux` via a
+shim) was never used for starship; it was a plain binary in `loadout/bin`.
+
+To switch it on, the missing line is:
+
+    eval "$(starship init bash)"      # in ~/.bashrc
+    # undo: delete that line
+
+### Obsidian adopted as the markdown wiki reader
+
+Chosen after MarkdownBlaze was removed as unusable. It was the only candidate
+already packaged in the official `extra` repo.
+
+    sudo pacman -Syu --noconfirm obsidian
+    # undo: sudo pacman -Rns obsidian   (also drops electron43 if nothing needs it)
+
+Snapshots 40/41. **Electron tax: `electron43` is 337.58 MiB installed** against
+Obsidian's own 26.45 MiB.
+
+The repo is the vault. Two consequences, both handled:
+
+    ~/cachyos-config/.gitignore   += .obsidian/          # app-managed, regenerable
+    ~/.config/obsidian/obsidian.json                     # vault pre-registered, open=true
+
+Verified by screen grab, not by assumption: the window shows the file explorer
+with this repo's actual tree (`benchmarks/`, `scripts/`, `plasmashell-watch/`,
+`customizations`, `frozen-system-recovery`, …), vault name `cachyos-config`.
+29 `.md` files at the top level, 34 including subdirectories.
+
+Performance measured rather than guessed, because Electron was the objection:
+
+| metric | value |
+| --- | --- |
+| warm start → vault workspace written | **2.0 s** |
+| RSS, whole process tree (8 processes, 117 threads) | **944 MB** |
+| idle CPU, measured as `/proc/<pid>/stat` delta over 10 s | **0.2% of one core** |
+| installed size | 26.45 MiB + 337.58 MiB electron43 |
+
+For scale on this box: `plasmashell` alone sits at 846 MB and `kwin_wayland` at
+512 MB, with 26 GB of 31 GB free. Obsidian costs about one more plasmashell. It
+does not drive like a Datsun 210 — the 944 MB is the real price, the CPU is not.

@@ -1,2 +1,5 @@
 # Local tooling caches / generated databases (never hand-edited, regenerable)
 .repowise/
+
+# Obsidian vault state (this repo is a vault; app-managed, regenerable)
+.obsidian/
