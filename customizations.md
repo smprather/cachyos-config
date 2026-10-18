@@ -5339,3 +5339,35 @@ separate-ESP rule still stands for whenever a disk is added back; it is a rule a
 boot safety, not about that particular drive.
 
 Nothing here changed system state apart from the one `user/config.sh` line.
+
+## 2026-10-17 (late) — shelly removed: unlogged transactions, no notify-only mode
+
+    sudo pacman -Rns --noconfirm shelly
+    sudo rm -rf ~/.config/shelly          # root-owned leftover from an old root-run
+    # undo: sudo pacman -Syu --noconfirm shelly   (see the prohibition in standard-tools.md)
+
+Snapshots 42/43, 8.18 MiB reclaimed. Checked before touching it: `pactree -r shelly`
+showed only itself, `Required By: None`, `Optional For: None`, no dependency on any
+hook, unit or autostart entry, and the sole attachment was its own polkit action
+(removed with the package). After: `pacman -Dk` reports no database errors and
+`systemctl --failed` is 0 in both scopes.
+
+The deciding fact was not the old unlogged-transaction evidence, which stands on its
+own — it was that **shelly has no notify-only mode**. `shelly --help` offers
+`search install upgrade downgrade mark news list-updates list backup utility purify`;
+there is no watcher/daemon subcommand. So "use it to browse only" could never be
+enforced by configuration, only by remembering a sentence an agent wrote in
+`standard-tools.md` months earlier. A rule that lives only in a doc is a reminder,
+not a control — the controls on this machine are the ones where the dangerous action
+is structurally unavailable (masked `mdmonitor`, `nowakeup.sh` resolving devices by
+product string instead of a brittle path).
+
+**No replacement notifier was built.** `cachy-update` already fills that role:
+`arch-update.timer` is `enabled`/`active` on a daily schedule (`ExecMainStatus=0` on
+its last run) and its tray applet renders the count from
+`~/.local/state/arch-update/tray_icon`. Adding a `checkupdates` + `notify-send`
+timer would have been a duplicate session-level component for a solved problem.
+
+Note while verifying: `checkupdates` reported **1 pending update** while the tray
+still showed "up to date" from its 19:32 run — correct behaviour for a daily check,
+just worth knowing the tray can be up to a day stale.

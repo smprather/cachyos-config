@@ -17,7 +17,6 @@ part of the preferred setup; record detailed diagnosis and changes in
 | Konsole | KDE terminal emulator | `konsole` | KDE-native terminal, installed 2026-10-11 (26.08.2-1.1 from `cachyos-extra-v3`). Completes the Plasma application set; `alacritty` ("atty") remains the daily driver. |
 | fixpanel | One-word recovery for a frozen Plasma panel | user-local: repo `bin/fixpanel`, symlinked into `~/.local/bin` | Added 2026-10-14 after plasmashell froze with its main thread pinned in Qt's EGL fallback retry. Restarts only the shell (`systemctl --user kill -s KILL` + start, then polls the D-Bus probe); open apps and terminals are untouched. The automatic equivalent is `plasmashell-wedge-watch` with its autokill flag. Do not hold the power button instead — the machine is alive when the panel is not. See `plasmashell-wedge.md`. |
 | nvidia-driver-watch | Weekly notice when a newer NVIDIA driver is in the repos | user-local: repo `bin/nvidia-driver-watch.sh` + `~/.config/systemd/user/nvidia-driver-watch.{service,timer}` | Added 2026-10-14 because the NVIDIA driver is the last unresolved suspect for the panel freeze and testing one means staying on it for days — without this, "pinned for a test" becomes "pinned forever". Logs to the user journal; also prints the test order for a new driver. `systemctl --user disable --now nvidia-driver-watch.timer` to remove. |
-| Shelly | GTK4 package manager with tray notifications | `shelly` (CachyOS, installed 2026-09-30) | **Do not use it to change the system.** `shelly upgrade all` performs real pacman transactions that appear in **neither** `/var/log/pacman.log` **nor** the journal: eight of them between 2026-10-06 and 2026-10-13 exist only as snapper pre/post pairs (155/157/167/169/171/173/179/181, described `/usr/bin/shelly upgrade all --ui-mode`), and that set includes the `qt6-base` 6.11.2 → 6.12.0 and `plasma-workspace`/`kwin` upgrade in the panel-wedge timeline. Use `sudo pacman -Syu` instead — same hooks and snapshots, plus the log. Reading is harmless: version browsing, the update list, and the tray notifier (which is how you learn updates exist) change nothing. See `AGENTS.md` Agent Contract #2 and `plasmashell-wedge.md`. It can be removed with `sudo pacman -Rns shelly`; check that nothing else needs it first (its `Required By` field), in case a CachyOS meta package pulls it in. |
 | wezterm | Terminal (the documented daily driver) | `wezterm` | Restored on the new install 2026-10-17; config in `~/.config/wezterm` and the rules in `AGENTS.md` still apply (never run bare `wezterm-gui`). Undo: `sudo pacman -Rns wezterm`. |
 | docker + docker-compose | Containers | `docker docker-compose` | Restored 2026-10-17 with `docker.service` enabled and `mylesp` in the `docker` group. Undo: `sudo pacman -Rns docker docker-compose`, disable the unit, `sudo gpasswd -d mylesp docker`. |
 | paru | AUR helper | `paru` | Restored 2026-10-17. `system-inventory.md`'s "no AUR helper" note describes Aug 2026; paru was installed later on the old system. |
@@ -73,3 +72,35 @@ Removed 2026-10-17 (snapper 36/37, 250 MiB reclaimed; the package alone pulled
 `xdg-dbus-proxy`). Do not reinstall it without first checking whether upstream has
 fixed rendering on WebKitGTK + NVIDIA Wayland — verified by screen grab, never by
 absence of an error string.
+
+## Do not install shelly
+
+Removed 2026-10-17 (snapper 42/43). `shelly upgrade all` performs **real pacman
+transactions that write neither `/var/log/pacman.log` nor the journal** — eight of
+them between 2026-10-06 and 2026-10-13 exist only as snapper pre/post pairs
+(155/157/167/169/171/173/179/181, described `/usr/bin/shelly upgrade all --ui-mode`),
+and that set includes the `qt6-base` 6.11.2 → 6.12.0 and `plasma-workspace`/`kwin`
+upgrade in the panel-wedge timeline. A change that cannot be reconstructed from the
+journal, the pacman log and snapper must not touch this system (`AGENTS.md`
+contract #2, `plasmashell-wedge.md`).
+
+It also had **no notify-only mode**. Its own `--help` lists `search install upgrade
+downgrade mark news list-updates list backup utility purify` — nothing that only
+watches. So "browsing is harmless" was never enforceable from inside the tool: it
+depended on remembering a written rule at the moment of a button click. That is a
+reminder, not a control.
+
+Nothing depended on it (`Required By: None`, `Optional For: None`), it was wired to
+no hook, unit or autostart entry, and the only attachment was its own polkit action.
+A root-owned `~/.config/shelly/config.json` from an old root-run was removed by hand
+— `pacman -Rns` does not touch a home-directory file.
+
+**What replaces it: nothing, and that is correct.** `cachy-update` already reports
+available updates — `arch-update.timer` is enabled and active on a daily schedule and
+its tray applet shows the count (icon state in `~/.local/state/arch-update/tray_icon`).
+Applying them is `sudo pacman -Syu`. Do not add a second notifier; a duplicate
+session-level component for an already-solved problem is its own cost
+(`AGENTS.md` contract #3).
+
+Undo, only if upstream ever makes its transactions logged:
+`sudo pacman -Syu --noconfirm shelly`
