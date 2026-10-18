@@ -162,6 +162,8 @@ tens of minutes. Largest directories:
 must carry, verify by name afterwards: .ssh 16K  .gnupg 80K  .config/systemd 76K
 .local/share/kwin 8K  .local/share/applications 36K  kwinrc 4K  kwinoutputconfig.json 4K
 + the containment drop-in ~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf
+  (REMOVED 2026-10-18 — do NOT carry it forward on the next rebuild: it leaked software-GL
+  into every panel-launched app and killed Chrome's 3D. See plasmashell-wedge.md.)
 ```
 
 Steps, run on the old system. Identify every disk by model or PARTUUID, never by device node — the
@@ -256,7 +258,7 @@ authority; this table exists so none of them is *missed*.
 | Artifact | What it does | Install/undo lives in |
 |---|---|---|
 | `/usr/local/bin/plasmashell-wedge-watch.sh` + `/etc/systemd/system/plasmashell-wedge-watch.{service,timer}` + `/etc/plasmashell-wedge-watch.autokill` | captures a core and respawns the panel when it wedges; the flag makes it automatic | `plasmashell-watch/README.md`, `plasmashell-wedge.md` |
-| `~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf` | keeps the shell off the NVIDIA EGL path — the freeze mechanism | `plasmashell-wedge.md` |
+| ~~`~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf`~~ — **removed 2026-10-18, do not restore** | env-var containment leaked software-GL into every panel-launched app (Chrome lost all 3D); the watchdog row above is the net for the freeze instead | `plasmashell-wedge.md` |
 | `/etc/sysctl.d/99-recovery.conf` | `panic=15`, `hardlockup_panic=1`, `nmi_watchdog=1` (CachyOS ships the last one **off**) | `frozen-system-recovery.md` |
 | `nowatchdog` removed from `/etc/default/limine` + `limine-update` | lets the lockup detector run at all | `frozen-system-recovery.md` |
 | `/etc/systemd/system/getty@tty3.service.d/autologin.conf` | passwordless rescue shell on `Ctrl+Alt+F3` | `frozen-system-recovery.md` |

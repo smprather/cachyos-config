@@ -37,6 +37,37 @@ Do not re-add `--ozone-platform=x11` casually. If Chrome ever needs to fall
 back to XWayland again, the taskbar pin must be changed in the same step — see
 [Taskbar pin depends on the ozone platform](#taskbar-pin-depends-on-the-ozone-platform).
 
+## "3D in Chrome isn't working" (2026-10-17) — inherited software-GL env, not the flags
+
+On the fresh install Chrome had **no 3D at all**: WebGL1/2 context creation failed and
+`chrome://gpu` listed every feature disabled ("GPU process was unable to boot"). The command
+line was never the problem — the same binary with the same `--use-angle=gl` renders fine in a
+clean environment, and even Chrome's *default* ANGLE failed the same way. The environment was:
+
+`~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf` (the 2026-10-14
+plasmashell freeze containment, carried across the rebuild inside `$HOME`) put
+`LIBGL_ALWAYS_SOFTWARE=1`, `MESA_LOADER_DRIVER_OVERRIDE=llvmpipe` and
+`__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json` into plasmashell's
+service environment — and **every app the panel launches inherits them** (74 processes,
+terminals included). Chrome therefore ran ANGLE on Mesa **llvmpipe**, which offers only
+`OpenGL_ES`, so ANGLE's desktop-GL request failed:
+
+```text
+Warning: EGL display does not support requested client API 'OpenGL' (supported: OpenGL_ES).
+ERROR: ContextResult::kFatalFailure: WebGL1 blocklisted   (and WebGL2 blocklisted)
+```
+
+Fixed 2026-10-18 by deleting the drop-in and restarting plasmashell (the wedge-risk trade is
+documented in `plasmashell-wedge.md`; the wedge watchdog is the net). Chrome on the session
+launch path then reports `ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2,
+OpenGL ES 3.2)` for WebGL1 and WebGL2.
+
+Diagnostic value for next time: a `chrome://gpu` Driver Information block naming
+`Google Inc. (Mesa)` / `llvmpipe` on this NVIDIA box means Chrome's **environment** is wrong,
+not the driver and not the flags — check the launching shell for `LIBGL_ALWAYS_SOFTWARE`
+first (`tr '\0' '\n' </proc/$(pgrep -x plasmashell)/environ | grep -E 'LIBGL|MESA|__EGL'`).
+Shells started before the fix kept the vars until they exited; a reboot clears them all.
+
 ## Native Wayland confirmed (2026-10-04)
 
 `--ozone-platform=x11` was inherited from Canary-era work on 2026-09-07 and had

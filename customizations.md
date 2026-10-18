@@ -5371,3 +5371,61 @@ timer would have been a duplicate session-level component for a solved problem.
 Note while verifying: `checkupdates` reported **1 pending update** while the tray
 still showed "up to date" from its 19:32 run — correct behaviour for a daily check,
 just worth knowing the tray can be up to a day stale.
+
+## 2026-10-18 (just after midnight) — plasmashell GL containment removed; it was eating Chrome's 3D
+
+"3d in chrome isn't working" on the fresh system. Root-caused with a disposable-profile
+CDP probe matrix, not guesses:
+
+- production flags + inherited env → WebGL1/2 **false**, `WebGL1 blocklisted` /
+  `WebGL2 blocklisted`, chrome://gpu GPU0 = `Google Inc. (Mesa) … llvmpipe`.
+- production flags + **clean env** → WebGL1/2 true, `ANGLE (NVIDIA … RTX 3060 … OpenGL ES 3.2)`.
+- `--use-angle=vulkan` worked even poisoned (it never touches EGL); `--use-angle=gl` *and*
+  Chrome's default ANGLE both died on llvmpipe. The flag was innocent.
+
+The poison: the 2026-10-14 containment drop-in
+(`plasma-plasmashell.service.d/10-mesa-software-gl.conf`) sets `Environment=` on the
+plasmashell service, and systemd has no no-inherit flag — every panel/KRunner launch carried
+`LIBGL_ALWAYS_SOFTWARE=1`, `MESA_LOADER_DRIVER_OVERRIDE=llvmpipe` and the Mesa EGL vendor
+pin. 74 processes had them at removal (alacritty → tmux → shells). It travelled here inside
+the mirrored `$HOME`; never a fresh-install or driver regression.
+
+Safety net verified *before* removal: `plasmashell-wedge-watch.timer` enabled+active (last
+trigger 00:37, `Result=success`), `/etc/plasmashell-wedge-watch.autokill` present, VT3
+getty and the recovery sysctls live.
+
+Change:
+
+    mv ~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf \
+       /tmp/10-mesa-software-gl.conf.removed-20261017   # same-boot restore copy; vanishes at boot
+    rmdir ~/.config/systemd/user/plasma-plasmashell.service.d
+    systemctl --user daemon-reload
+    systemctl --user restart plasma-plasmashell.service
+
+Verified after: new plasmashell env clean; maps `libEGL_nvidia` + `libnvidia-eglcore`
+(GPU-rendered again); 1–3 jiffies per 5 s window (~0.5 % of one core — no spin signature);
+panel renders (screenshot); Chrome launched as a transient user service (the panel's launch
+path) reports WebGL1+2 on `ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 3060/PCIe/SSE2,
+OpenGL ES 3.2)`. `~/.config/chrome-flags.conf` unchanged (`--use-angle=gl` still correct).
+
+Undo (but it costs Chrome's 3D again for anything launched from the panel — that was the
+whole problem; if the wedge ever recurs, prefer the watchdog and see the options in
+`plasmashell-wedge.md`):
+
+    mkdir -p ~/.config/systemd/user/plasma-plasmashell.service.d
+    cat > ~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf <<'EOF'
+    [Service]
+    Environment=__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+    Environment=LIBGL_ALWAYS_SOFTWARE=1
+    Environment=MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+    EOF
+    systemctl --user daemon-reload && systemctl --user restart plasma-plasmashell.service
+
+For the next reader: terminals/tmux started before the removal still carry the vars, so
+Chrome launched from an *old* shell would still be software-rendered until those processes
+exit — a reboot clears all of them. Also recorded: `QT_QUICK_BACKEND` (the knob the
+2026-10-14 note was reaching for when it tried the invalid `QSG_RHI_BACKEND=software`)
+would have leaked to Qt children exactly the same way — an environment variable cannot
+scope a containment to one process that also launches apps. Net state: `plasmashell-wedge.md`;
+failure signature: `chrome-fixes.md`; `fresh-install-checklist.md` no longer carries the
+drop-in forward.

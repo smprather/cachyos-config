@@ -212,12 +212,21 @@ What was actually true at 09:09 on 2026-10-14, from `/proc` and a root gdb attac
   to `journalctl --user -t nvidia-driver-watch`, with the test order (fresh login → does the
   running shell map libnvidia-eglcore → suspend/resume and grep for
   `kgmmuInvalidateTlb_GM107` → leave it a day and let the watchdog watch).
-- **The shell is contained off the NVIDIA EGL path**
-  (`~/.config/systemd/user/plasma-plasmashell.service.d/10-mesa-software-gl.conf`: Mesa's EGL
-  vendor pinned + software rasteriser). Verified: `libnvidia-eglcore` is absent from
-  plasmashell's maps and idle CPU measured 0.02 of one core over 10 s. The `newFallbackSurface`
-  retry loop cannot run in the shell regardless of which trigger fires; delete the drop-in to
-  go back to a GPU-rendered panel.
+- **The shell is back on the NVIDIA EGL path — the containment was removed 2026-10-18
+  because it broke every app the panel launches.** The drop-in did contain the shell, but
+  service `Environment=` lines are inherited by **everything plasmashell starts** (panel,
+  KRunner, and their descendants — 74 processes at removal, terminals included). All of them
+  rendered on Mesa llvmpipe, which is ES-only, so Chrome's ANGLE GL backend failed init and
+  Chrome lost all 3D ("3d in chrome isn't working", 2026-10-17; signature and diagnosis in
+  `chrome-fixes.md`). Verified after removal: plasmashell maps `libEGL_nvidia` +
+  `libnvidia-eglcore` again, idles at ~0.5 % of one core, and Chrome on the session launch
+  path reports `ANGLE (NVIDIA … OpenGL ES 3.2)` for WebGL1+2. **If the EGL spin ever
+  reproduces on Plasma 6.8 / Qt 6.12, do not reach for another environment-variable
+  containment — any env var leaks to launched apps the same way (`QT_QUICK_BACKEND` too).**
+  The choices are: live with the watchdog's auto-kill (a panel blink per recurrence), scope a
+  software-GL exception to the one app that needs it via a user-level `.desktop` override, or
+  act on the driver/Qt generation itself. The watchdog (CPU-spin source +
+  `/etc/plasmashell-wedge-watch.autokill`) is the standing net either way.
 
 ### The rule that matters when the panel freezes
 
